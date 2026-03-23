@@ -9,7 +9,7 @@ alwaysApply: true
 ## Project context
 
 `diegops` is a personal productivity CLI (Rust stable + clap v4) that must run identically on:
-- Windows (WSL / native): `x86_64-pc-windows-msvc`
+- Windows (WSL / native): `x86_64-pc-windows-gnu`
 - macOS Intel/ARM: `x86_64-apple-darwin`, `aarch64-apple-darwin`
 - Ubuntu/Debian: `x86_64-unknown-linux-gnu`
 - Alpine (containers): `x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`
@@ -123,4 +123,11 @@ Never manually edit workflow version strings; the tag drives everything.
 
 All `runs-on` values must be `cadi-hq-runner-dind-set` (self-hosted Linux dind).
 Never use `ubuntu-latest`, `macos-latest`, or `windows-latest`.
-All release targets use `cross` — the runner is Linux with Docker available.
+
+Build tool per target:
+- `x86_64-unknown-linux-gnu` — native `cargo build`
+- `x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`, `x86_64-pc-windows-gnu` — `cross` (pinned release)
+- `x86_64-apple-darwin`, `aarch64-apple-darwin` — `cargo-zigbuild` (Zig as linker)
+
+Windows target is `x86_64-pc-windows-gnu` — cross has no MSVC image and MSVC is impossible to cross-compile from Linux.
+macOS targets use `cargo-zigbuild` — cross has no Darwin Docker image.

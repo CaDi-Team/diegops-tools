@@ -3,7 +3,7 @@
 ## What this project is
 
 `diegops` is a personal productivity CLI written in **Rust**, targeting six platforms:
-- `x86_64-pc-windows-msvc` (Windows terminal / WSL)
+- `x86_64-pc-windows-gnu` (Windows terminal / WSL — GNU toolchain via cross/MinGW)
 - `x86_64-apple-darwin` (macOS Intel)
 - `aarch64-apple-darwin` (macOS Apple Silicon)
 - `x86_64-unknown-linux-gnu` (Ubuntu / Debian)
@@ -19,7 +19,9 @@ It must work equally well for humans typing in a terminal and for automation ins
 - Cargo for builds and tests
 - GitHub Actions for CI (fmt + clippy + test) and releases (tag-triggered cross-platform builds)
 - Self-hosted runner: **all** `runs-on` values must be `cadi-hq-runner-dind-set` — never use `ubuntu-latest`, `macos-latest`, or `windows-latest`
-- All release targets use `cross` (Docker-based cross-compilation) — the runner is Linux dind
+- Build tools: native cargo (linux-gnu), cross/Docker (linux-musl + windows-gnu), cargo-zigbuild (macOS)
+- Windows target is `x86_64-pc-windows-gnu` — MSVC cross-compilation from Linux is not possible
+- cross has no Docker image for macOS targets — use cargo-zigbuild for those
 
 ## Rules Copilot must follow
 
