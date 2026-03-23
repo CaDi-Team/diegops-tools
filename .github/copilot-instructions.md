@@ -116,7 +116,13 @@ Cargo.lock             # Always committed (binary crate)
 |---------|-------------|
 | `diegops version` | Print version string |
 | `diegops update` | Self-update from latest GitHub release |
+| `diegops repo init` | Create sample config at `~/.diegops/repos.yaml` |
+| `diegops repo apply [--path PREFIX] [--config FILE]` | Clone all missing repos (idempotent) |
+| `diegops repo list [--config FILE]` | Show repos cloned locally |
+| `diegops repo list-diff [--config FILE]` | Show repos in config but not cloned |
 | `diegops help` | Show full help |
+
+`diegops repo` reads `~/.diegops/repos.yaml` (override: `--config` or `$DIEGOPS_REPOS_CONFIG`). Format: `targets[]` with `path` (`$HOME`-prefixed) and `repos[]` (SSH git URLs). `apply` is idempotent; progress to stderr, summary to stdout.
 
 `diegops update` specifics: target triple determined at compile time via `#[cfg]` in `src/commands/update.rs`; HTTP via `ureq` (rustls, sync); archives via `flate2`+`tar` (Unix) / `zip` (Windows); self-replace via atomic rename (Unix) or rename-to-`.old` (Windows).
 

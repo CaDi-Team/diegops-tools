@@ -85,7 +85,13 @@ fs::create_dir_all(&path)?;
 |---------|-------------|
 | `diegops version` | Print version string |
 | `diegops update` | Self-update from latest GitHub release |
+| `diegops repo init` | Create sample config at `~/.diegops/repos.yaml` |
+| `diegops repo apply [--path PREFIX] [--config FILE]` | Clone all missing repos (idempotent) |
+| `diegops repo list [--config FILE]` | Show repos cloned locally |
+| `diegops repo list-diff [--config FILE]` | Show repos in config but not cloned |
 | `diegops help` | Show full help |
+
+`diegops repo` config: `~/.diegops/repos.yaml` or `$DIEGOPS_REPOS_CONFIG`. Format: `targets[]` with `path` and `repos[]`. `apply` creates dirs, skips existing `.git`, accepts `--path` prefix filter. No git crate — uses `std::process::Command("git")`. serde_yaml 0.9 for YAML parsing.
 
 `diegops update` implementation notes:
 - Target triple detected at **compile time** via `#[cfg]` constants — never at runtime

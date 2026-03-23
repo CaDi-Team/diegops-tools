@@ -97,6 +97,10 @@ The release profile uses `opt-level = "z"`, `lto = true`, `strip = true`. Don't 
 |---------|-------------|
 | `diegops version` | Print version string |
 | `diegops update` | Self-update from latest GitHub release |
+| `diegops repo init` | Create sample config at `~/.diegops/repos.yaml` |
+| `diegops repo apply [--path PREFIX] [--config FILE]` | Clone all missing repos (idempotent) |
+| `diegops repo list [--config FILE]` | Show repos cloned locally |
+| `diegops repo list-diff [--config FILE]` | Show repos in config but not cloned |
 | `diegops help` | Show full help |
 
 `diegops update`: target triple via compile-time `#[cfg]` constants; HTTP via `ureq` (rustls, sync); archive via `flate2`+`tar` (Unix) / `zip` (Windows); binary replacement via atomic rename (Unix) or rename-to-`.old` (Windows). Network-dependent — only test `--help` offline.

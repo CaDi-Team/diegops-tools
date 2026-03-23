@@ -17,6 +17,9 @@ clap = { version = "4", features = ["derive"] }
 # (pure Rust, no C OpenSSL dependency) — required for static musl builds.
 ureq = { version = "2", default-features = false, features = ["tls", "json"] }
 serde_json = "1"
+serde = { version = "1", features = ["derive"] }
+# serde_yaml 0.9 is archived upstream but stable for this format.
+serde_yaml = "0.9"
 
 # Unix targets: extract .tar.gz release archives
 [target.'cfg(unix)'.dependencies]

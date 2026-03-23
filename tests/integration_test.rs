@@ -44,6 +44,40 @@ fn flag_version_exits_successfully() {
 }
 
 #[test]
+fn repo_help_exits_successfully() {
+    let output = diegops()
+        .args(["repo", "--help"])
+        .output()
+        .expect("failed to run diegops repo --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("apply"), "got: {stdout}");
+    assert!(stdout.contains("list"), "got: {stdout}");
+    assert!(stdout.contains("list-diff"), "got: {stdout}");
+}
+
+#[test]
+fn repo_init_help_exits_successfully() {
+    let output = diegops()
+        .args(["repo", "init", "--help"])
+        .output()
+        .expect("failed to run diegops repo init --help");
+
+    assert!(output.status.success());
+}
+
+#[test]
+fn repo_apply_help_exits_successfully() {
+    let output = diegops()
+        .args(["repo", "apply", "--help"])
+        .output()
+        .expect("failed to run diegops repo apply --help");
+
+    assert!(output.status.success());
+}
+
+#[test]
 fn update_help_exits_successfully() {
     // Does not hit the network — just verifies the subcommand is wired up
     // and its --help flag works. Actual update behaviour requires a live
