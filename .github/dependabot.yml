@@ -1,11 +1,19 @@
 version: 2
 updates:
-  - package-ecosystem: "npm" # Update this based on the stack
+  # Rust / Cargo dependencies
+  - package-ecosystem: "cargo"
     directory: "/"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
     groups:
-       dependencies:
-          patterns:
-            - "*"
+      dependencies:
+        patterns:
+          - "*"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5

@@ -1,12 +1,17 @@
 # General
 .DS_Store
 *.log
-node_modules/
-build/
-dist/
 .env
+
+# Rust
+/target/
+Cargo.lock.bak
 
 # IDEs
 .idea/
 .vscode/
 *.swp
+
+# Build outputs
+build/
+dist/

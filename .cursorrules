@@ -1,0 +1,121 @@
+# Cursor Rules — diegops
+
+## Project
+
+`diegops` is a cross-platform personal productivity CLI written in Rust.
+
+### Target platforms
+- `x86_64-pc-windows-msvc` — Windows (WSL and native)
+- `x86_64-apple-darwin` — macOS Intel
+- `aarch64-apple-darwin` — macOS Apple Silicon
+- `x86_64-unknown-linux-gnu` — Ubuntu / Debian
+- `x86_64-unknown-linux-musl` — Alpine (static binary)
+- `aarch64-unknown-linux-musl` — ARM64 Alpine (static binary)
+
+### Stack
+- Rust stable, clap v4 (derive), Cargo
+- GitHub Actions: CI on every push, releases on `vx.y.z` tags
+- All `runs-on` must be `cadi-hq-runner-dind-set` (self-hosted Linux dind) — never GitHub-hosted runners
+- All release targets use `cross` for cross-compilation (runner is Linux, Docker available)
+
+---
+
+## Mandatory rules
+
+### 1. Cross-platform paths
+Use `std::path::PathBuf` — never string concatenation for paths.
+
+### 2. No `.unwrap()` in production code
+Use `?` operator. Only `.unwrap()` in tests and with a `// SAFETY:` comment if truly infallible.
+
+### 3. OS guards for platform-specific code
+```rust
+#[cfg(target_os = "windows")]
+fn windows_thing() { ... }
+#[cfg(not(target_os = "windows"))]
+fn unix_thing() { ... }
+```
+
+### 4. No shell invocation without OS detection
+Do not assume `sh`, `bash`, `cmd.exe`, or `powershell` exists.
+
+### 5. Idempotency
+Every command is safe to run multiple times. No errors on already-existing state. "Already done" exits 0.
+
+```rust
+// Wrong: fails on second run
+fs::create_dir(&path)?;
+// Right
+fs::create_dir_all(&path)?;
+```
+
+### 6. Exit codes
+- `0` = success (including idempotent no-ops)
+- `1` = user/input error
+- `2` = internal/unexpected error
+`main()` returns `Result<(), Box<dyn std::error::Error>>` and uses `?`. No `std::process::exit()` outside `main`.
+
+### 7. stdout vs stderr
+- `println!` → data / machine-readable output (stdout)
+- `eprintln!` → errors, warnings, diagnostics (stderr)
+Never mix. This makes `diegops cmd | jq` and CI log capture work correctly.
+
+### 8. TTY / container awareness
+The binary must work without a TTY (Docker, CI pipelines):
+- No interactive prompts — use flags/args.
+- Custom ANSI color: check `std::io::IsTerminal` before emitting escape codes.
+- `clap` auto-respects `NO_COLOR`.
+- Do not assume stdin is a terminal.
+
+### 9. Code quality
+Code must pass:
+- `cargo fmt --check`
+- `cargo clippy -- -D warnings`
+- `cargo test`
+
+### 10. Imports
+Remove all unused imports. Keep `std` as the first choice over external crates.
+
+### 11. Error handling
+`main()` returns `Result<(), Box<dyn std::error::Error>>`. Command handlers return `Result<T, E>`. Propagate with `?`.
+
+### 12. Testing
+- Unit tests inline with `#[cfg(test)]`
+- Integration tests in `tests/` using `env!("CARGO_BIN_EXE_diegops")`
+- No network calls in tests
+- Tests must work on all target platforms
+- Verify exit codes: check `output.status.success()` or `output.status.code()`
+
+### 13. Binary size discipline
+The release profile uses `opt-level = "z"`, `lto = true`, `strip = true`. Don't add heavy dependencies for simple tasks.
+
+---
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `diegops version` | Print version string |
+| `diegops update` | Self-update from latest GitHub release |
+| `diegops help` | Show full help |
+
+`diegops update`: target triple via compile-time `#[cfg]` constants; HTTP via `ureq` (rustls, sync); archive via `flate2`+`tar` (Unix) / `zip` (Windows); binary replacement via atomic rename (Unix) or rename-to-`.old` (Windows). Network-dependent — only test `--help` offline.
+
+## Structure conventions
+
+```
+src/main.rs              # Thin CLI dispatcher — parse args, call commands
+src/commands/mod.rs      # Module declarations
+src/commands/<name>.rs   # Non-trivial command logic (extract when >20 lines)
+tests/integration_test.rs
+Cargo.toml
+Cargo.lock               # Always committed
+```
+
+## Do not
+- Use nightly Rust features
+- Hardcode home directory paths
+- Use `std::process::exit()` except in `main` as a last resort
+- Commit the `target/` directory
+- Add async unless the command genuinely needs concurrent I/O
+- Use `native-tls` / OpenSSL — use `ureq` with `default-features = false, features = ["tls", "json"]` (rustls) for musl/static compatibility
