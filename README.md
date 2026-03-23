@@ -23,51 +23,64 @@ Personal productivity CLI for humans and containers.
 
 Download the binary for your platform from the [latest release](../../releases/latest) and put it somewhere on your `PATH`.
 
-### Linux / macOS
-
-Replace `<version>` and `<target>` with the values that match your system (see the table above):
+### Linux / macOS — one-liner (auto-detects latest version and platform)
 
 ```sh
-VERSION=v0.1.0
-TARGET=x86_64-unknown-linux-gnu   # adjust to your target
+curl -fsSL "https://api.github.com/repos/dpinto-config/diegops-tools/releases/latest" \
+  | grep '"browser_download_url"' \
+  | grep "$(uname -s | tr '[:upper:]' '[:lower:]' | sed 's/darwin/apple-darwin/;s/linux/unknown-linux-gnu/')-$(uname -m | sed 's/x86_64/x86_64/;s/arm64/aarch64/')" \
+  | cut -d'"' -f4 \
+  | xargs curl -fsSL \
+  | tar -xz
+sudo mv diegops /usr/local/bin/diegops
+```
+
+Or pick a specific version and target manually:
+
+```sh
+VERSION=$(curl -fsSL https://api.github.com/repos/dpinto-config/diegops-tools/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
+TARGET=x86_64-unknown-linux-gnu   # see table above for your target
 
 curl -fsSL "https://github.com/dpinto-config/diegops-tools/releases/download/${VERSION}/diegops-${VERSION}-${TARGET}.tar.gz" \
   | tar -xz
-
-# Move the binary to a directory on your PATH, e.g.:
-mv diegops /usr/local/bin/diegops
-chmod +x /usr/local/bin/diegops
+sudo mv diegops /usr/local/bin/diegops
 ```
 
-**Alpine / container (musl):**
+**Alpine / musl (containers):**
 ```sh
-TARGET=x86_64-unknown-linux-musl   # or aarch64-unknown-linux-musl
-```
-
-**macOS Apple Silicon:**
-```sh
-TARGET=aarch64-apple-darwin
+VERSION=$(curl -fsSL https://api.github.com/repos/dpinto-config/diegops-tools/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
+ARCH=$(uname -m | sed 's/x86_64/x86_64/;s/aarch64/aarch64/')
+curl -fsSL "https://github.com/dpinto-config/diegops-tools/releases/download/${VERSION}/diegops-${VERSION}-${ARCH}-unknown-linux-musl.tar.gz" \
+  | tar -xz -C /usr/local/bin
 ```
 
 ### Windows (PowerShell)
 
 ```powershell
-$version = "v0.1.0"
+$repo    = "dpinto-config/diegops-tools"
+$version = (Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest").tag_name
 $target  = "x86_64-pc-windows-gnu"
-$url     = "https://github.com/dpinto-config/diegops-tools/releases/download/$version/diegops-$version-$target.zip"
+$url     = "https://github.com/$repo/releases/download/$version/diegops-$version-$target.zip"
 
 Invoke-WebRequest -Uri $url -OutFile diegops.zip
-Expand-Archive -Path diegops.zip -DestinationPath "$env:USERPROFILE\bin"
+Expand-Archive -Path diegops.zip -DestinationPath "$env:USERPROFILE\bin" -Force
 # Ensure $env:USERPROFILE\bin is on your PATH
 ```
 
-### Container / CI (one-liner)
+### Container / CI (one-liner, always latest)
 
 ```sh
-# Alpine
+# Alpine (musl static — no apk packages needed beyond curl and tar)
 apk add --no-cache curl tar
-VERSION=v0.1.0
+VERSION=$(curl -fsSL https://api.github.com/repos/dpinto-config/diegops-tools/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
 curl -fsSL "https://github.com/dpinto-config/diegops-tools/releases/download/${VERSION}/diegops-${VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+  | tar -xz -C /usr/local/bin
+```
+
+```sh
+# Ubuntu / Debian
+VERSION=$(curl -fsSL https://api.github.com/repos/dpinto-config/diegops-tools/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
+curl -fsSL "https://github.com/dpinto-config/diegops-tools/releases/download/${VERSION}/diegops-${VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
   | tar -xz -C /usr/local/bin
 ```
 

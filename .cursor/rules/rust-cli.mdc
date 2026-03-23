@@ -125,9 +125,7 @@ All `runs-on` values must be `cadi-hq-runner-dind-set` (self-hosted Linux dind).
 Never use `ubuntu-latest`, `macos-latest`, or `windows-latest`.
 
 Build tool per target:
-- `x86_64-unknown-linux-gnu` — native `cargo build`
-- `x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`, `x86_64-pc-windows-gnu` — `cross` (pinned release)
-- `x86_64-apple-darwin`, `aarch64-apple-darwin` — `cargo-zigbuild` (Zig as linker)
+- `x86_64-unknown-linux-gnu` — native `cargo build` (runner IS this target)
+- All other targets — `cargo-zigbuild` with Zig 0.13.0 (no Docker/cross; Zig ships musl libc and MinGW)
 
-Windows target is `x86_64-pc-windows-gnu` — cross has no MSVC image and MSVC is impossible to cross-compile from Linux.
-macOS targets use `cargo-zigbuild` — cross has no Darwin Docker image.
+No `cross` or Docker required. All cross-compilation is done via Zig as linker.
