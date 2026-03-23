@@ -1,0 +1,12 @@
+# General
+.DS_Store
+*.log
+node_modules/
+build/
+dist/
+.env
+
+# IDEs
+.idea/
+.vscode/
+*.swp

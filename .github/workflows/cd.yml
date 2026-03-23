@@ -1,0 +1,27 @@
+name: CD
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+    branches:
+      - main
+
+jobs:
+  delivery:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      # Ideally, you download artifacts from the CI run here if separated.
+      # For now, we assume we might need to rebuild or this action handles it.
+
+      # Composite Action: Push Artifact
+      - name: Push Artifact
+        uses: CaDi-Team/shared-knowledge-ceneter/actions/push@main
+
+      # Composite Action: Deploy
+      - name: Deploy
+        uses: CaDi-Team/shared-knowledge-ceneter/actions/deploy@main
