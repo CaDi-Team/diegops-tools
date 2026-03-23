@@ -1,0 +1,120 @@
+---
+description: Rust CLI rules for the diegops cross-platform tool
+globs: ["*.rs", "Cargo.toml", "Cargo.lock", ".github/workflows/*.yml"]
+alwaysApply: true
+---
+
+# diegops Rust CLI rules
+
+## Project context
+
+`diegops` is a personal productivity CLI (Rust stable + clap v4) that must run identically on:
+- Windows (WSL / native): `x86_64-pc-windows-msvc`
+- macOS Intel/ARM: `x86_64-apple-darwin`, `aarch64-apple-darwin`
+- Ubuntu/Debian: `x86_64-unknown-linux-gnu`
+- Alpine (containers): `x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`
+
+Both interactive human use and headless container/CI use are first-class targets.
+
+## Cross-platform rules
+
+- Paths: `PathBuf::from` / `.join()` — never `format!("{}/{}", ...)` for paths
+- No shell assumptions: don't invoke `sh`, `bash`, `cmd.exe`, `powershell` without OS detection
+- Platform-specific code: wrap in `#[cfg(target_os = "...")]` with explanatory comment
+- musl/static: shared code must not introduce dynamic glibc dependencies
+
+## Code quality — non-negotiable
+
+```rust
+// All code must compile clean with:
+// cargo fmt --check
+// cargo clippy -- -D warnings
+```
+
+- No `.unwrap()` in production paths — use `?`
+- `main()` returns `Result<(), Box<dyn std::error::Error>>` and propagates with `?`
+- No unused imports or dead code
+- Public items require `///` doc comments
+- Error propagation via `Result<T, E>` and `?`
+
+## Exit codes
+
+- `0` — success (idempotent no-ops also exit 0)
+- `1` — user/input error
+- `2` — internal/unexpected error
+
+Never use `std::process::exit()` outside `main`. Let `main() -> Result` handle exit codes via the `?` operator.
+
+## stdout vs stderr
+
+- `println!` → data / machine-readable output (stdout)
+- `eprintln!` → errors, warnings, progress (stderr)
+
+This separation is mandatory for pipeline use: `diegops cmd | jq` and CI log collection depend on it.
+
+## TTY / container compatibility
+
+The binary runs without a TTY in Docker containers and CI environments:
+- No interactive prompts — all inputs via flags/arguments
+- Custom ANSI/color: guard with `std::io::IsTerminal` before emitting escape codes
+- `clap` automatically respects `NO_COLOR`; don't override it
+- Never assume stdin is attached to a terminal
+
+## Idempotency
+
+Commands must be safe to run N times. Prefer upsert semantics. Never error on already-existing state.
+
+```rust
+// Wrong: errors on second run
+fs::create_dir(&path)?;
+// Right: idempotent
+fs::create_dir_all(&path)?;
+```
+
+## Testing rules
+
+- Unit tests: `#[cfg(test)]` inline
+- Integration tests: `tests/` directory using `env!("CARGO_BIN_EXE_diegops")`
+- Zero network calls in tests
+- All tests must pass on all 6 targets
+- Always assert `output.status.success()` or check the specific exit code
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `diegops version` | Print version string |
+| `diegops update` | Self-update from latest GitHub release |
+| `diegops help` | Show full help |
+
+`diegops update` implementation notes:
+- Target triple detected at **compile time** via `#[cfg]` constants — never at runtime
+- HTTP: `ureq` with `default-features = false, features = ["tls", "json"]` (rustls, no OpenSSL)
+- Archive: `flate2` + `tar` on Unix; `zip` on Windows (platform-specific Cargo deps)
+- Replace: atomic `fs::rename` on Unix; rename-to-`.old` + rename-new on Windows
+- Network is needed at runtime — integration tests only call `update --help`
+
+## Dependencies
+
+For any new HTTP dependency use `ureq` (sync, rustls) — not `reqwest`, not `native-tls`, not `openssl`.
+Reason: musl static builds require pure-Rust TLS; OpenSSL is not statically available in all cross-compilation environments.
+
+## Structure
+
+```
+src/main.rs              # Thin dispatcher: parse → dispatch → return Result
+src/commands/mod.rs      # pub mod declarations
+src/commands/<name>.rs   # Non-trivial command logic (extract when >~20 lines)
+tests/                   # Integration tests only
+```
+
+## Releases
+
+Tag `vX.Y.Z` → GH Actions builds 6 binaries → GitHub Release assets.
+Never manually edit workflow version strings; the tag drives everything.
+
+## Runner
+
+All `runs-on` values must be `cadi-hq-runner-dind-set` (self-hosted Linux dind).
+Never use `ubuntu-latest`, `macos-latest`, or `windows-latest`.
+All release targets use `cross` — the runner is Linux with Docker available.

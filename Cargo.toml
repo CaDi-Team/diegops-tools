@@ -1,0 +1,34 @@
+[package]
+name = "diegops"
+version = "0.1.0"
+edition = "2021"
+description = "diegops — personal productivity CLI for humans and containers"
+license = "UNLICENSED"
+repository = "https://github.com/dpinto-config/diegops-tools"
+
+[[bin]]
+name = "diegops"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+# ureq: sync HTTP client + JSON parsing (no async required).
+# default-features = false disables native-tls; the "tls" feature uses rustls
+# (pure Rust, no C OpenSSL dependency) — required for static musl builds.
+ureq = { version = "2", default-features = false, features = ["tls", "json"] }
+serde_json = "1"
+
+# Unix targets: extract .tar.gz release archives
+[target.'cfg(unix)'.dependencies]
+flate2 = "1"
+tar = "0.4"
+
+# Windows target: extract .zip release archives
+[target.'cfg(windows)'.dependencies]
+zip = "2"
+
+[profile.release]
+opt-level = "z"      # Minimize binary size
+lto = true           # Link-time optimization
+codegen-units = 1    # Better optimization at cost of compile time
+strip = true         # Strip debug symbols from binary

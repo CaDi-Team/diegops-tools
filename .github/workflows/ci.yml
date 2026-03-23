@@ -2,25 +2,42 @@ name: CI
 
 on:
   pull_request:
-    branches: [ "main" ]
+    branches: ["develop", "main"]
   push:
-    branches: [ "main" ]
+    branches: ["develop", "main"]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
 
 jobs:
-  integration:
-    runs-on: ubuntu-latest
+  check:
+    name: Format + Lint + Test
+    runs-on: cadi-hq-runner-dind-set
+
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      # Composite Action: Build
-      # Replace with actual path or repo reference
-      - name: Build
-        uses: CaDi-Team/shared-knowledge-ceneter/actions/build@main
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
-      # Composite Action: Test
-      - name: Test
-        uses: CaDi-Team/shared-knowledge-ceneter/actions/test@main
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
 
-      # Composite Action: Security Scan
-      - name: Security Scan
-        uses: CaDi-Team/shared-knowledge-ceneter/actions/security-scan@main
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy -- -D warnings
+
+      - name: Run tests
+        run: cargo test
