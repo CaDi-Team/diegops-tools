@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [ "main" ]
+  push:
+    branches: [ "main" ]
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      # Composite Action: Build
+      # Replace with actual path or repo reference
+      - name: Build
+        uses: CaDi-Team/shared-knowledge-ceneter/actions/build@main
+
+      # Composite Action: Test
+      - name: Test
+        uses: CaDi-Team/shared-knowledge-ceneter/actions/test@main
+
+      # Composite Action: Security Scan
+      - name: Security Scan
+        uses: CaDi-Team/shared-knowledge-ceneter/actions/security-scan@main
