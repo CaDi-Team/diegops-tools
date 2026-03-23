@@ -7,14 +7,17 @@ Personal productivity CLI for humans and containers.
 
 ## Supported platforms
 
-| OS | Architecture | Target |
-|----|-------------|--------|
-| Windows (WSL / native) | x86_64 | `x86_64-pc-windows-msvc` |
-| macOS | Intel | `x86_64-apple-darwin` |
-| macOS | Apple Silicon | `aarch64-apple-darwin` |
-| Ubuntu / Debian | x86_64 | `x86_64-unknown-linux-gnu` |
-| Alpine (containers) | x86_64 | `x86_64-unknown-linux-musl` |
-| Alpine (containers) | ARM64 | `aarch64-unknown-linux-musl` |
+| OS | Architecture | Target | Build tool |
+|----|-------------|--------|------------|
+| Windows (WSL / native) | x86_64 | `x86_64-pc-windows-gnu` | cross (MinGW) |
+| macOS | Intel | `x86_64-apple-darwin` | cargo-zigbuild |
+| macOS | Apple Silicon | `aarch64-apple-darwin` | cargo-zigbuild |
+| Ubuntu / Debian | x86_64 | `x86_64-unknown-linux-gnu` | native |
+| Alpine (containers) | x86_64 | `x86_64-unknown-linux-musl` | cross (musl) |
+| Alpine (containers) | ARM64 | `aarch64-unknown-linux-musl` | cross (musl) |
+
+> **Windows note:** the release binary targets `x86_64-pc-windows-gnu` (MinGW toolchain). It is fully
+> standalone — no MinGW runtime DLLs are required. MSVC cross-compilation from Linux is not possible.
 
 ## Installation
 
@@ -50,7 +53,7 @@ TARGET=aarch64-apple-darwin
 
 ```powershell
 $version = "v0.1.0"
-$target  = "x86_64-pc-windows-msvc"
+$target  = "x86_64-pc-windows-gnu"
 $url     = "https://github.com/dpinto-config/diegops-tools/releases/download/$version/diegops-$version-$target.zip"
 
 Invoke-WebRequest -Uri $url -OutFile diegops.zip

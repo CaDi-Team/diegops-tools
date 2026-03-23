@@ -6,7 +6,7 @@
 
 | Platform | Targets |
 |----------|---------|
-| Windows (WSL + native terminal) | `x86_64-pc-windows-msvc` |
+| Windows (WSL + native terminal) | `x86_64-pc-windows-gnu` |
 | macOS Intel | `x86_64-apple-darwin` |
 | macOS Apple Silicon | `aarch64-apple-darwin` |
 | Ubuntu / Debian | `x86_64-unknown-linux-gnu` |
@@ -157,6 +157,14 @@ Triggers on tag push matching `v[0-9]+.[0-9]+.[0-9]+`:
 
 Runner: `cadi-hq-runner-dind-set` (self-hosted Linux dind) for all jobs.
 **Do not** add `ubuntu-latest`, `macos-latest`, or `windows-latest` as runner values — use the self-hosted tag exclusively.
+
+Build tools per target:
+- `x86_64-unknown-linux-gnu` — native `cargo build` (runner is this target)
+- `x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`, `x86_64-pc-windows-gnu` — `cross` (pinned stable release via `CROSS_VERSION` env var in cd.yml)
+- `x86_64-apple-darwin`, `aarch64-apple-darwin` — `cargo-zigbuild` (Zig as cross-linker; pinned via `ZIG_VERSION` env var)
+
+**Do not** use `cross` for macOS targets — cross has no Docker image for them.
+**Do not** use `x86_64-pc-windows-msvc` — MSVC cross-compilation from Linux is impossible; use `x86_64-pc-windows-gnu`.
 
 To cut a release:
 ```sh

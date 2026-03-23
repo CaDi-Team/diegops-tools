@@ -17,8 +17,10 @@ use std::io::Read;
 ///
 /// Used to select the correct release asset from the GitHub release page.
 /// Each supported target produces a uniquely named archive in the CD pipeline.
+/// Windows releases are built with the GNU toolchain (cross via MinGW Docker image).
+/// MSVC cross-compilation from Linux is not possible; the GNU binary is fully standalone.
 #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
-const CURRENT_TARGET: &str = "x86_64-pc-windows-msvc";
+const CURRENT_TARGET: &str = "x86_64-pc-windows-gnu";
 
 #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
 const CURRENT_TARGET: &str = "x86_64-apple-darwin";

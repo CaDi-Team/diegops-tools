@@ -8,47 +8,58 @@ on:
 env:
   CARGO_TERM_COLOR: always
   BINARY_NAME: diegops
+  # Pinned versions — bump here when upgrading toolchains.
+  CROSS_VERSION: "0.2.5"
+  ZIG_VERSION: "0.13.0"
 
 jobs:
   build:
     name: Build ${{ matrix.target }}
-    # All builds run on the self-hosted dind runner (Linux x86_64).
-    # cross handles cross-compilation for every target via Docker.
     runs-on: cadi-hq-runner-dind-set
 
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Linux — glibc (Ubuntu, Debian)
+          # Native build — runner is x86_64 Linux GNU, no cross-compilation needed.
           - target: x86_64-unknown-linux-gnu
+            tool: native
             archive: tar.gz
 
-          # Linux — musl static (Alpine x86_64)
+          # Linux musl static (Alpine x86_64) — cross via Docker.
           - target: x86_64-unknown-linux-musl
+            tool: cross
             archive: tar.gz
 
-          # Linux — musl static (Alpine ARM64)
+          # Linux musl static (Alpine ARM64) — cross via Docker.
           - target: aarch64-unknown-linux-musl
+            tool: cross
             archive: tar.gz
 
-          # macOS Intel
+          # macOS Intel — cargo-zigbuild (cross has no macOS image).
           - target: x86_64-apple-darwin
+            tool: zigbuild
             archive: tar.gz
 
-          # macOS Apple Silicon
+          # macOS Apple Silicon — cargo-zigbuild.
           - target: aarch64-apple-darwin
+            tool: zigbuild
             archive: tar.gz
 
-          # Windows
-          - target: x86_64-pc-windows-msvc
+          # Windows x86_64 GNU — cross via Docker.
+          # MSVC cross-compilation from Linux is not possible; GNU produces
+          # a fully standalone binary suitable for Windows terminals and WSL.
+          - target: x86_64-pc-windows-gnu
+            tool: cross
             archive: zip
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Install system dependencies
-        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends build-essential zip
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends build-essential zip xz-utils
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -64,13 +75,41 @@ jobs:
           key: ${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ matrix.target }}-cargo-
 
-      - name: Install cross
-        run: cargo install cross --git https://github.com/cross-rs/cross
+      # ── Tool installation (one branch per tool) ──────────────────────────────
 
-      - name: Build
+      - name: Install cross (pinned release)
+        if: matrix.tool == 'cross'
+        run: |
+          cargo install cross --version "${CROSS_VERSION}" --locked
+          cross --version
+
+      - name: Install Zig + cargo-zigbuild (macOS targets)
+        if: matrix.tool == 'zigbuild'
+        run: |
+          ZIG="zig-linux-x86_64-${ZIG_VERSION}"
+          curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/${ZIG}.tar.xz" \
+            | tar -xJ -C /tmp
+          sudo mv "/tmp/${ZIG}" /opt/zig
+          sudo ln -sf /opt/zig/zig /usr/local/bin/zig
+          zig version
+          cargo install cargo-zigbuild --locked
+          cargo zigbuild --version
+
+      # ── Build ────────────────────────────────────────────────────────────────
+
+      - name: Build (native)
+        if: matrix.tool == 'native'
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Build (cross)
+        if: matrix.tool == 'cross'
         run: cross build --release --target ${{ matrix.target }}
 
-      # ── Archive ─────────────────────────────────────────────────────────────
+      - name: Build (zigbuild)
+        if: matrix.tool == 'zigbuild'
+        run: cargo zigbuild --release --target ${{ matrix.target }}
+
+      # ── Archive ──────────────────────────────────────────────────────────────
 
       - name: Create archive (tar.gz)
         if: matrix.archive == 'tar.gz'

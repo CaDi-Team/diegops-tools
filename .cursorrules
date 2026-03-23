@@ -5,7 +5,7 @@
 `diegops` is a cross-platform personal productivity CLI written in Rust.
 
 ### Target platforms
-- `x86_64-pc-windows-msvc` — Windows (WSL and native)
+- `x86_64-pc-windows-gnu` — Windows (WSL and native, GNU toolchain)
 - `x86_64-apple-darwin` — macOS Intel
 - `aarch64-apple-darwin` — macOS Apple Silicon
 - `x86_64-unknown-linux-gnu` — Ubuntu / Debian
@@ -16,7 +16,9 @@
 - Rust stable, clap v4 (derive), Cargo
 - GitHub Actions: CI on every push, releases on `vx.y.z` tags
 - All `runs-on` must be `cadi-hq-runner-dind-set` (self-hosted Linux dind) — never GitHub-hosted runners
-- All release targets use `cross` for cross-compilation (runner is Linux, Docker available)
+- Build tools: native cargo (linux-gnu), cross/Docker (linux-musl + windows-gnu), cargo-zigbuild/Zig (macOS)
+- Windows target: `x86_64-pc-windows-gnu` — never `msvc` (impossible to cross-compile from Linux)
+- macOS targets: cargo-zigbuild only — cross has no Docker image for Darwin
 
 ---
 
