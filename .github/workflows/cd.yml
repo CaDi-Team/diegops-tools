@@ -9,7 +9,6 @@ env:
   CARGO_TERM_COLOR: always
   BINARY_NAME: diegops
   # Pinned versions — bump here when upgrading toolchains.
-  CROSS_VERSION: "0.2.5"
   ZIG_VERSION: "0.13.0"
 
 jobs:
@@ -26,14 +25,14 @@ jobs:
             tool: native
             archive: tar.gz
 
-          # Linux musl static (Alpine x86_64) — cross via Docker.
+          # Linux musl static (Alpine x86_64) — cargo-zigbuild (Zig ships musl libc).
           - target: x86_64-unknown-linux-musl
-            tool: cross
+            tool: zigbuild
             archive: tar.gz
 
-          # Linux musl static (Alpine ARM64) — cross via Docker.
+          # Linux musl static (Alpine ARM64) — cargo-zigbuild.
           - target: aarch64-unknown-linux-musl
-            tool: cross
+            tool: zigbuild
             archive: tar.gz
 
           # macOS Intel — cargo-zigbuild (cross has no macOS image).
@@ -46,11 +45,11 @@ jobs:
             tool: zigbuild
             archive: tar.gz
 
-          # Windows x86_64 GNU — cross via Docker.
+          # Windows x86_64 GNU — cargo-zigbuild.
           # MSVC cross-compilation from Linux is not possible; GNU produces
           # a fully standalone binary suitable for Windows terminals and WSL.
           - target: x86_64-pc-windows-gnu
-            tool: cross
+            tool: zigbuild
             archive: zip
 
     steps:
@@ -77,13 +76,7 @@ jobs:
 
       # ── Tool installation (one branch per tool) ──────────────────────────────
 
-      - name: Install cross (pinned release)
-        if: matrix.tool == 'cross'
-        run: |
-          cargo install cross --version "${CROSS_VERSION}" --locked
-          cross --version
-
-      - name: Install Zig + cargo-zigbuild (macOS targets)
+      - name: Install Zig + cargo-zigbuild
         if: matrix.tool == 'zigbuild'
         run: |
           ZIG="zig-linux-x86_64-${ZIG_VERSION}"
@@ -93,17 +86,12 @@ jobs:
           sudo ln -sf /opt/zig/zig /usr/local/bin/zig
           zig version
           cargo install cargo-zigbuild --locked
-          cargo zigbuild --version
 
       # ── Build ────────────────────────────────────────────────────────────────
 
       - name: Build (native)
         if: matrix.tool == 'native'
         run: cargo build --release --target ${{ matrix.target }}
-
-      - name: Build (cross)
-        if: matrix.tool == 'cross'
-        run: cross build --release --target ${{ matrix.target }}
 
       - name: Build (zigbuild)
         if: matrix.tool == 'zigbuild'

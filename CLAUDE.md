@@ -151,7 +151,7 @@ Runner: `cadi-hq-runner-dind-set` (self-hosted Linux dind).
 ### Release (`cd.yml`)
 Triggers on tag push matching `v[0-9]+.[0-9]+.[0-9]+`:
 1. Builds all 6 targets in a matrix — all jobs on `cadi-hq-runner-dind-set`.
-2. All targets use `cross` (Docker-based cross-compilation from the Linux host).
+2. Cross-compilation via `cargo-zigbuild` (Zig as linker — no Docker, no `cross`).
 3. Archives: `.tar.gz` for Unix targets (bash + `tar`), `.zip` for Windows (bash + `zip`).
 4. Creates a GitHub Release with all archives as assets.
 
@@ -160,10 +160,9 @@ Runner: `cadi-hq-runner-dind-set` (self-hosted Linux dind) for all jobs.
 
 Build tools per target:
 - `x86_64-unknown-linux-gnu` — native `cargo build` (runner is this target)
-- `x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`, `x86_64-pc-windows-gnu` — `cross` (pinned stable release via `CROSS_VERSION` env var in cd.yml)
-- `x86_64-apple-darwin`, `aarch64-apple-darwin` — `cargo-zigbuild` (Zig as cross-linker; pinned via `ZIG_VERSION` env var)
+- All other targets — `cargo-zigbuild` (Zig pinned via `ZIG_VERSION` env var in cd.yml; Zig ships musl libc and MinGW)
 
-**Do not** use `cross` for macOS targets — cross has no Docker image for them.
+**Do not** use `cross` or Docker for any target — `cargo-zigbuild` handles all cross-compilation.
 **Do not** use `x86_64-pc-windows-msvc` — MSVC cross-compilation from Linux is impossible; use `x86_64-pc-windows-gnu`.
 
 To cut a release:
