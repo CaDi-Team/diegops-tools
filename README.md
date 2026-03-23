@@ -83,12 +83,71 @@ This fetches the latest tag from GitHub Releases, downloads the binary for your 
 ## Commands
 
 ```
-diegops version    Print version information
-diegops update     Update to the latest released version
-diegops help       Show help and available commands
-diegops --help     Same as help
-diegops --version  Same as version
+diegops version                                    Print version information
+diegops update                                     Update to the latest released version
+diegops help                                       Show help and available commands
+diegops --help                                     Same as help
+diegops --version                                  Same as version
+
+diegops repo init                                  Create sample config at ~/.diegops/repos.yaml
+diegops repo apply                                 Clone all missing repos (idempotent)
+diegops repo apply --path <prefix>                 Clone only repos under this path prefix
+diegops repo apply --config <file>                 Use a custom repos.yaml
+diegops repo list                                  Show repos already cloned locally
+diegops repo list-diff                             Show repos in config but not yet cloned
 ```
+
+### `diegops repo` — repository workspace
+
+Manages a set of git repositories defined in a YAML config file.
+
+```
+diegops repo init                        Create a sample config in ~/.diegops/
+diegops repo apply                       Clone all missing repos (idempotent)
+diegops repo apply --path <prefix>       Clone only repos under this path prefix
+diegops repo apply --config <file>       Use a custom repos.yaml file
+diegops repo list                        Show repos that are already cloned locally
+diegops repo list-diff                   Show repos in config but NOT cloned locally
+```
+
+**Getting started:**
+
+```sh
+diegops repo init          # creates ~/.diegops/repos.yaml with a commented sample
+# edit ~/.diegops/repos.yaml to add your repos
+diegops repo apply         # clone everything
+```
+
+**Config file** (`~/.diegops/repos.yaml`) format:
+
+```yaml
+targets:
+  - path: $HOME/github/cadilabs/products/cadibrain
+    repos:
+      - git@github.com:CaDi-Team/cadibrains-web-front.git
+      - git@github.com:CaDi-Team/cadibrains-ai-service.git
+```
+
+**Default config location:** `~/.diegops/repos.yaml`
+Override with `--config <path>` or `$DIEGOPS_REPOS_CONFIG`.
+
+**Examples:**
+
+```sh
+# Clone everything in the config
+diegops repo apply
+
+# Clone only the cadibrain workspace
+diegops repo apply --path '$HOME/github/cadilabs/products/cadibrain'
+
+# See what's missing before cloning
+diegops repo list-diff
+
+# See what's already cloned
+diegops repo list
+```
+
+> **Idempotency:** `apply` skips repos whose directory already contains a `.git` folder — safe to run repeatedly.
 
 ## Development
 

@@ -105,7 +105,20 @@ Additional rules:
 |---------|-------------|
 | `diegops version` | Print version string |
 | `diegops update` | Fetch latest GitHub release and replace binary in place |
+| `diegops repo init` | Create sample config at `~/.diegops/repos.yaml` (idempotent) |
+| `diegops repo apply [--path PREFIX] [--config FILE]` | Clone all missing repos (idempotent) |
+| `diegops repo list [--config FILE]` | Show repos that are currently cloned locally |
+| `diegops repo list-diff [--config FILE]` | Show repos in config but not cloned locally |
 | `diegops help` | Show full help |
+
+### `diegops repo` — workspace management
+- Config file: `~/.diegops/repos.yaml` (override: `--config` or `$DIEGOPS_REPOS_CONFIG`)
+- `init` creates `~/.diegops/repos.yaml` with a commented sample; skips silently if already exists
+- Format: `targets[]` with `path` (`$HOME`-prefixed) and `repos[]` (SSH git URLs)
+- `apply` is idempotent: existing `.git` dirs are skipped, target dirs are created if missing
+- `--path` filter: only process targets whose expanded path starts with the given prefix; `$HOME` and `/$HOME` both accepted
+- Progress (SKIP/CLONE/FAIL) → stderr; final summary → stdout
+- Runs `git clone` via `std::process::Command` — no git crate needed; requires `git` on `$PATH`
 
 ### `diegops update` — self-update behaviour
 - Determines its own target triple at **compile time** via `#[cfg]` constants in `src/commands/update.rs`.

@@ -1,6 +1,7 @@
 mod commands;
 
 use clap::{CommandFactory, Parser, Subcommand};
+use commands::repo::RepoCommand;
 
 #[derive(Parser)]
 #[command(
@@ -24,6 +25,11 @@ enum Commands {
     Help,
     /// Update diegops to the latest released version
     Update,
+    /// Manage repository workspace — clone, list, and diff repos from a config file
+    Repo {
+        #[command(subcommand)]
+        cmd: RepoCommand,
+    },
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -38,6 +44,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Some(Commands::Update) => {
             commands::update::run()?;
+        }
+        Some(Commands::Repo { cmd }) => {
+            let config_path_str;
+            match cmd {
+                RepoCommand::Apply { path, config } => {
+                    config_path_str = config;
+                    let cfg = config_path_str.as_deref().map(std::path::Path::new);
+                    commands::repo::apply(cfg, path.as_deref())?;
+                }
+                RepoCommand::List { config } => {
+                    config_path_str = config;
+                    let cfg = config_path_str.as_deref().map(std::path::Path::new);
+                    commands::repo::list(cfg)?;
+                }
+                RepoCommand::ListDiff { config } => {
+                    config_path_str = config;
+                    let cfg = config_path_str.as_deref().map(std::path::Path::new);
+                    commands::repo::list_diff(cfg)?;
+                }
+                RepoCommand::Init => {
+                    commands::repo::init()?;
+                }
+            }
         }
     }
     Ok(())
