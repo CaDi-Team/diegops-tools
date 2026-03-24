@@ -64,7 +64,9 @@ const RELEASES_API: &str = "https://api.github.com/repos/CaDi-Team/diegops-tools
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     eprintln!("Checking for updates...");
 
-    let release = fetch_latest()?;
+    let token = super::auth::load_gh_token().ok().flatten();
+
+    let release = fetch_latest(token.as_deref())?;
 
     let latest_tag = release["tag_name"]
         .as_str()
@@ -81,7 +83,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     eprintln!("Downloading {latest_tag} for {CURRENT_TARGET}...");
 
     let url = find_asset_url(&release)?;
-    let bytes = download(&url)?;
+    let bytes = download(&url, token.as_deref())?;
 
     eprintln!("Extracting...");
     let binary = extract_binary(&bytes)?;
@@ -97,13 +99,26 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
 // Network helpers
 // ---------------------------------------------------------------------------
 
-fn fetch_latest() -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+fn fetch_latest(token: Option<&str>) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
     let ua = format!("diegops/{}", env!("CARGO_PKG_VERSION"));
-    let response = ureq::get(RELEASES_API)
+    let mut req = ureq::get(RELEASES_API)
         .set("User-Agent", &ua)
-        .set("Accept", "application/vnd.github.v3+json")
-        .call()?;
-    Ok(response.into_json()?)
+        .set("Accept", "application/vnd.github.v3+json");
+    if let Some(t) = token {
+        req = req.set("Authorization", &format!("Bearer {t}"));
+    }
+    let response = req.call();
+
+    match response {
+        Ok(resp) => Ok(resp.into_json()?),
+        Err(ureq::Error::Status(404, _)) if token.is_none() => {
+            Err("GitHub API returned 404. If this is a private repo, run 'diegops auth gh login <PAT>' first".into())
+        }
+        Err(ureq::Error::Status(401 | 403, _)) => {
+            Err("stored GitHub token is no longer valid. Run 'diegops auth gh login <PAT>' to update it".into())
+        }
+        Err(e) => Err(e.into()),
+    }
 }
 
 fn find_asset_url(release: &serde_json::Value) -> Result<String, Box<dyn std::error::Error>> {
@@ -132,14 +147,14 @@ fn find_asset_url(release: &serde_json::Value) -> Result<String, Box<dyn std::er
     Err(format!("no release asset found for target '{CURRENT_TARGET}'").into())
 }
 
-fn download(url: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+fn download(url: &str, token: Option<&str>) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let ua = format!("diegops/{}", env!("CARGO_PKG_VERSION"));
+    let mut req = ureq::get(url).set("User-Agent", &ua);
+    if let Some(t) = token {
+        req = req.set("Authorization", &format!("Bearer {t}"));
+    }
     let mut buf = Vec::new();
-    ureq::get(url)
-        .set("User-Agent", &ua)
-        .call()?
-        .into_reader()
-        .read_to_end(&mut buf)?;
+    req.call()?.into_reader().read_to_end(&mut buf)?;
     Ok(buf)
 }
 
