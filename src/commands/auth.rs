@@ -3,12 +3,41 @@
 //! Tokens are stored as JSON files in `~/.diegops/tokens/`, one per provider.
 //! Currently supports GitHub (`gh`).
 
-// Public API is not wired into main.rs yet (Task 4); suppress dead-code warnings until then.
-#![allow(dead_code)]
-
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
+
+// ---------------------------------------------------------------------------
+// Clap sub-command definitions
+// ---------------------------------------------------------------------------
+
+/// Auth credential management sub-commands.
+#[derive(clap::Subcommand)]
+pub enum AuthCommand {
+    /// GitHub authentication
+    Gh {
+        #[command(subcommand)]
+        cmd: GhCommand,
+    },
+    /// Show authentication status for all providers
+    Status,
+    /// Remove all stored authentication tokens
+    Logout,
+}
+
+/// GitHub-specific auth sub-commands.
+#[derive(clap::Subcommand)]
+pub enum GhCommand {
+    /// Validate and store a GitHub personal access token
+    Login {
+        /// GitHub personal access token (PAT)
+        token: String,
+    },
+    /// Remove stored GitHub token
+    Logout,
+    /// Show authenticated GitHub user and token scopes
+    Whoami,
+}
 
 // ---------------------------------------------------------------------------
 // Token data structures
@@ -35,11 +64,13 @@ fn tokens_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
 }
 
 /// Formats the current time as an RFC 3339 timestamp.
+#[allow(dead_code)] // used by save_gh_token, wired in Task 5
 fn format_rfc3339_now() -> String {
     humantime::format_rfc3339(std::time::SystemTime::now()).to_string()
 }
 
 /// Saves a GitHub token to the given directory.
+#[allow(dead_code)] // used by save_gh_token, wired in Task 5
 fn save_gh_token_to(dir: &Path, token: &str) -> Result<(), Box<dyn std::error::Error>> {
     fs::create_dir_all(dir)?;
     let data = TokenData {
@@ -60,6 +91,7 @@ fn save_gh_token_to(dir: &Path, token: &str) -> Result<(), Box<dyn std::error::E
 }
 
 /// Loads a GitHub token from the given directory. Returns `None` if file absent.
+#[allow(dead_code)] // used by load_gh_token, wired in Task 6
 fn load_gh_token_from(dir: &Path) -> Result<Option<String>, Box<dyn std::error::Error>> {
     let path = dir.join("gh.json");
     if !path.exists() {
@@ -96,11 +128,13 @@ fn remove_gh_token_from(dir: &Path) -> Result<bool, Box<dyn std::error::Error>> 
 // ---------------------------------------------------------------------------
 
 /// Saves a GitHub token to `~/.diegops/tokens/gh.json`.
+#[allow(dead_code)] // wired in Task 5 (gh login)
 pub fn save_gh_token(token: &str) -> Result<(), Box<dyn std::error::Error>> {
     save_gh_token_to(&tokens_dir()?, token)
 }
 
 /// Loads the GitHub token. Resolution: file > $GITHUB_TOKEN > None.
+#[allow(dead_code)] // wired in Task 6 (update uses token)
 pub fn load_gh_token() -> Result<Option<String>, Box<dyn std::error::Error>> {
     let from_file = load_gh_token_from(&tokens_dir()?)?;
     if from_file.is_some() {
@@ -139,6 +173,57 @@ pub fn remove_all_tokens() -> Result<usize, Box<dyn std::error::Error>> {
         }
     }
     Ok(count)
+}
+
+// ---------------------------------------------------------------------------
+// Command handlers
+// ---------------------------------------------------------------------------
+
+/// Validates and stores a GitHub PAT.
+pub fn gh_login(_token: &str) -> Result<(), Box<dyn std::error::Error>> {
+    todo!("auth gh login")
+}
+
+/// Shows the authenticated GitHub user.
+pub fn gh_whoami() -> Result<(), Box<dyn std::error::Error>> {
+    todo!("auth gh whoami")
+}
+
+/// Removes the stored GitHub token.
+pub fn gh_logout() -> Result<(), Box<dyn std::error::Error>> {
+    if remove_gh_token()? {
+        println!("GitHub token removed.");
+    } else {
+        println!("GitHub token was not configured.");
+    }
+    Ok(())
+}
+
+/// Shows auth status for all providers.
+pub fn status() -> Result<(), Box<dyn std::error::Error>> {
+    match load_gh_token_data()? {
+        Some(data) => {
+            println!(
+                "GitHub (gh)    [ok] configured    stored {}",
+                data.stored_at
+            );
+        }
+        None => {
+            println!("GitHub (gh)    [--] not configured");
+        }
+    }
+    Ok(())
+}
+
+/// Removes all stored tokens.
+pub fn logout_all() -> Result<(), Box<dyn std::error::Error>> {
+    let count = remove_all_tokens()?;
+    if count > 0 {
+        println!("Removed {count} token(s).");
+    } else {
+        println!("No tokens were configured.");
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------

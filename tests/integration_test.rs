@@ -161,3 +161,43 @@ fn vault_list_diff_help_exits_successfully() {
 
     assert!(output.status.success());
 }
+
+#[test]
+fn auth_help_exits_successfully() {
+    let output = diegops()
+        .args(["auth", "--help"])
+        .output()
+        .expect("failed to run diegops auth --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("gh"), "got: {stdout}");
+    assert!(stdout.contains("status"), "got: {stdout}");
+    assert!(stdout.contains("logout"), "got: {stdout}");
+}
+
+#[test]
+fn auth_gh_help_exits_successfully() {
+    let output = diegops()
+        .args(["auth", "gh", "--help"])
+        .output()
+        .expect("failed to run diegops auth gh --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("login"), "got: {stdout}");
+    assert!(stdout.contains("logout"), "got: {stdout}");
+    assert!(stdout.contains("whoami"), "got: {stdout}");
+}
+
+#[test]
+fn auth_status_runs_without_config() {
+    let output = diegops()
+        .args(["auth", "status"])
+        .output()
+        .expect("failed to run diegops auth status");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("GitHub"), "got: {stdout}");
+}
