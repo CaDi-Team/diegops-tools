@@ -13,9 +13,9 @@
 //! 2. `DIEGOPS_REPOS_CONFIG` environment variable
 //! 3. `~/.diegops/repos.yaml` (default)
 
-use std::path::{Path, PathBuf};
+use std::fs;
+use std::path::Path;
 use std::process::Command;
-use std::{fs, io};
 
 use serde::Deserialize;
 
@@ -93,14 +93,14 @@ pub fn apply(
     path_filter: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let config = load_config(config_path)?;
-    let filter = path_filter.map(expand_home);
+    let filter = path_filter.map(super::common::expand_home);
 
     let mut n_cloned: usize = 0;
     let mut n_skipped: usize = 0;
     let mut failures: Vec<String> = Vec::new();
 
     for target in &config.targets {
-        let dest = expand_home(&target.path);
+        let dest = super::common::expand_home(&target.path);
 
         if let Some(ref f) = filter {
             if !dest.starts_with(f) {
@@ -170,7 +170,7 @@ pub fn list(config_path: Option<&Path>) -> Result<(), Box<dyn std::error::Error>
     let mut total: usize = 0;
 
     for target in &config.targets {
-        let dest = expand_home(&target.path);
+        let dest = super::common::expand_home(&target.path);
         let cloned: Vec<&str> = target
             .repos
             .iter()
@@ -206,7 +206,7 @@ pub fn list_diff(config_path: Option<&Path>) -> Result<(), Box<dyn std::error::E
     let mut total: usize = 0;
 
     for target in &config.targets {
-        let dest = expand_home(&target.path);
+        let dest = super::common::expand_home(&target.path);
         let missing: Vec<(&str, &str)> = target
             .repos
             .iter()
@@ -244,7 +244,7 @@ pub fn list_diff(config_path: Option<&Path>) -> Result<(), Box<dyn std::error::E
 /// Idempotent: if the file already exists it prints its location and exits 0
 /// without modifying anything.
 pub fn init() -> Result<(), Box<dyn std::error::Error>> {
-    let dir = diegops_dir()?;
+    let dir = super::common::diegops_dir()?;
     let config_path = dir.join("repos.yaml");
 
     if config_path.exists() {
@@ -291,85 +291,11 @@ targets:
 // ---------------------------------------------------------------------------
 
 fn load_config(path: Option<&Path>) -> Result<ReposConfig, Box<dyn std::error::Error>> {
-    let config_path = match path {
-        Some(p) => p.to_owned(),
-        None => {
-            if let Ok(env_path) = std::env::var("DIEGOPS_REPOS_CONFIG") {
-                PathBuf::from(env_path)
-            } else {
-                default_config_path()?
-            }
-        }
-    };
-
-    let content = fs::read_to_string(&config_path).map_err(|e| {
-        if e.kind() == io::ErrorKind::NotFound {
-            format!(
-                "repos config not found: {}\n  Hint: create it or pass --config <path>",
-                config_path.display()
-            )
-        } else {
-            format!("could not read {}: {e}", config_path.display())
-        }
-    })?;
-
+    let config_path =
+        super::common::resolve_config_path(path, "DIEGOPS_REPOS_CONFIG", "repos.yaml")?;
+    let content = super::common::read_config_file(&config_path)?;
     serde_yaml::from_str::<ReposConfig>(&content)
         .map_err(|e| format!("invalid repos config {}: {e}", config_path.display()).into())
-}
-
-fn default_config_path() -> Result<PathBuf, Box<dyn std::error::Error>> {
-    Ok(home_dir()?.join(".diegops").join("repos.yaml"))
-}
-
-fn diegops_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
-    Ok(home_dir()?.join(".diegops"))
-}
-
-/// Returns the current user's home directory.
-///
-/// Checks `$HOME` first (Unix convention), then `$USERPROFILE` (Windows convention).
-fn home_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
-    std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .map(PathBuf::from)
-        .map_err(|_| "home directory not set ($HOME / $USERPROFILE)".into())
-}
-
-/// Expands a `$HOME`-prefixed path string to an absolute `PathBuf`.
-///
-/// Uses `.join()` per component — never string concatenation — so the result
-/// is always a valid `PathBuf` regardless of platform path separator.
-///
-/// Also handles the `/$HOME/...` form (leading slash before `$HOME`) in case
-/// the caller passes a shell-expanded value with an extra slash.
-fn expand_home(path: &str) -> PathBuf {
-    // Normalise `/$HOME/...` → `$HOME/...`
-    let path = if path.starts_with("/$HOME") {
-        &path[1..]
-    } else {
-        path
-    };
-
-    if let Some(rest) = path.strip_prefix("$HOME") {
-        let home = std::env::var("HOME")
-            .or_else(|_| std::env::var("USERPROFILE"))
-            .map(PathBuf::from)
-            .unwrap_or_default();
-
-        let relative = rest.trim_start_matches('/');
-        if relative.is_empty() {
-            return home;
-        }
-        let mut p = home;
-        for component in relative.split('/') {
-            if !component.is_empty() {
-                p = p.join(component);
-            }
-        }
-        p
-    } else {
-        PathBuf::from(path)
-    }
 }
 
 /// Extracts the repo name from a git SSH URL.
