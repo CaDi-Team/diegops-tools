@@ -21,6 +21,7 @@
 use serde::Deserialize;
 use std::fs;
 use std::path::Path;
+use std::process::Command;
 
 // ---------------------------------------------------------------------------
 // Clap sub-command definitions
@@ -223,6 +224,104 @@ targets:
         keys: \"*\"
 ";
 
+// ---------------------------------------------------------------------------
+// Internal helpers — used by `apply` (next task)
+// ---------------------------------------------------------------------------
+
+/// Formats a single `.env` line with double-quoted, escaped value.
+#[allow(dead_code)] // used by `apply` (next task)
+fn format_env_line(key: &str, value: &str) -> String {
+    let escaped = value.replace('\\', r"\\").replace('"', r#"\""#);
+    format!("{key}=\"{escaped}\"")
+}
+
+/// Checks that the `vault` CLI is available on PATH.
+#[allow(dead_code)] // used by `apply` (next task)
+fn check_vault_binary() -> Result<(), Box<dyn std::error::Error>> {
+    match Command::new("vault").arg("--version").output() {
+        Ok(output) if output.status.success() => Ok(()),
+        Ok(_) => Err("vault CLI found but returned an error. Check your installation.".into()),
+        Err(_) => Err(
+            "vault CLI not found on PATH. Install it from https://developer.hashicorp.com/vault/install"
+                .into(),
+        ),
+    }
+}
+
+/// Checks that VAULT_ADDR is set.
+#[allow(dead_code)] // used by `apply` (next task)
+fn check_vault_addr() -> Result<(), Box<dyn std::error::Error>> {
+    if std::env::var("VAULT_ADDR").is_err() {
+        return Err("VAULT_ADDR is not set. Export it or configure your Vault client".into());
+    }
+    Ok(())
+}
+
+/// Checks that the current Vault token is valid.
+#[allow(dead_code)] // used by `apply` (next task)
+fn check_vault_auth() -> Result<(), Box<dyn std::error::Error>> {
+    let output = Command::new("vault")
+        .args(["token", "lookup"])
+        .output()
+        .map_err(|e| format!("could not run vault: {e}"))?;
+
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err("vault is not authenticated. Run 'vault login' first".into())
+    }
+}
+
+/// Fetches all key-value pairs from a Vault KV v2 path.
+///
+/// Returns a map of key → value. On error, returns a user-friendly message.
+#[allow(dead_code)] // used by `apply` (next task)
+fn vault_kv_get(
+    vault_path: &str,
+) -> Result<serde_json::Map<String, serde_json::Value>, Box<dyn std::error::Error>> {
+    let output = Command::new("vault")
+        .args(["kv", "get", "-format=json", vault_path])
+        .output()
+        .map_err(|e| format!("could not run vault: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stderr = stderr.trim();
+        if stderr.contains("permission denied") || stderr.contains("403") {
+            return Err(
+                format!("access denied for '{vault_path}'. Check your Vault policies").into(),
+            );
+        }
+        if stderr.contains("no secrets") || stderr.contains("Not Found") || stderr.contains("404") {
+            return Err(format!(
+                "secret not found at '{vault_path}'. Verify the path exists in Vault"
+            )
+            .into());
+        }
+        return Err(format!("vault kv get failed for '{vault_path}': {stderr}").into());
+    }
+
+    parse_vault_response(&output.stdout, vault_path)
+}
+
+/// Parses the JSON response from `vault kv get -format=json`.
+///
+/// Extracted for testability — the JSON structure is `{ "data": { "data": { ... } } }`.
+#[allow(dead_code)] // used by `vault_kv_get` above and tests
+fn parse_vault_response(
+    json_bytes: &[u8],
+    vault_path: &str,
+) -> Result<serde_json::Map<String, serde_json::Value>, Box<dyn std::error::Error>> {
+    let json: serde_json::Value = serde_json::from_slice(json_bytes)?;
+    let data = json
+        .get("data")
+        .and_then(|d| d.get("data"))
+        .and_then(|d| d.as_object())
+        .ok_or_else(|| format!("unexpected JSON structure from vault kv get for '{vault_path}'"))?;
+
+    Ok(data.clone())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -286,5 +385,44 @@ targets:
             KeySelector::All(s) => assert_eq!(s, "*"),
             KeySelector::List(_) => panic!("expected All"),
         }
+    }
+
+    #[test]
+    fn format_env_line_escapes_quotes_and_backslashes() {
+        assert_eq!(format_env_line("key", "simple"), "key=\"simple\"");
+        assert_eq!(
+            format_env_line("key", r#"has "quotes""#),
+            r#"key="has \"quotes\"""#
+        );
+        assert_eq!(
+            format_env_line("key", r"back\slash"),
+            r#"key="back\\slash""#
+        );
+        assert_eq!(format_env_line("key", "has spaces"), r#"key="has spaces""#);
+    }
+
+    #[test]
+    fn parse_vault_response_extracts_data() {
+        let json = br#"{
+            "data": {
+                "data": {
+                    "username": "admin",
+                    "password": "s3cret",
+                    "port": 5432
+                },
+                "metadata": { "version": 1 }
+            }
+        }"#;
+        let data = parse_vault_response(json, "secret/test").unwrap();
+        assert_eq!(data.get("username").unwrap().as_str().unwrap(), "admin");
+        assert_eq!(data.get("password").unwrap().as_str().unwrap(), "s3cret");
+        assert_eq!(data.get("port").unwrap().as_u64().unwrap(), 5432);
+        assert_eq!(data.len(), 3);
+    }
+
+    #[test]
+    fn parse_vault_response_rejects_bad_json() {
+        let json = br#"{"data": {"wrong": "shape"}}"#;
+        assert!(parse_vault_response(json, "secret/test").is_err());
     }
 }
