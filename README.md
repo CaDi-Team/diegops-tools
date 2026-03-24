@@ -126,6 +126,14 @@ diegops auth status                                Show authentication status
 diegops auth logout                                Remove all stored tokens
 
 diegops cadi                                       Show the DiegOps hero screen
+
+diegops devtools git set [--name NAME] [--email EMAIL]  Set git global user.name and user.email
+diegops devtools gpg init [--name NAME] [--email EMAIL]  Generate GPG identity config
+diegops devtools gpg set                                 Generate GPG key, upload to GitHub, configure signing
+diegops devtools gpg restart                             Restart gpg-agent
+diegops devtools ssh list                                List local and GitHub SSH keys
+diegops devtools ssh config                              Print ~/.ssh/config
+diegops devtools ssh create [--name N] [--type T] [--email E]  Create a new SSH key
 ```
 
 ### `diegops repo` — repository workspace
@@ -279,6 +287,77 @@ diegops auth gh whoami                   # show authenticated user and token sco
 ### `diegops cadi`
 
 Displays the DiegOps hero screen with ASCII art branding.
+
+### `diegops devtools` — developer workstation setup
+
+Automates identity and tooling configuration for a fresh developer workstation. Covers git identity, GPG signing, and SSH key management.
+
+**Identity resolution order:** `--name` / `--email` flags > `git config` values > GitHub API (via `gh` CLI).
+
+**Prerequisites:** `git` is required for all subcommands. `gpg` for GPG commands. `gh` (GitHub CLI, authenticated) for GPG upload and SSH key listing. `ssh-keygen` for SSH key creation.
+
+#### git
+
+```
+diegops devtools git set [--name NAME] [--email EMAIL]
+```
+
+Sets `git config --global user.name` and `user.email`. If flags are omitted, values are resolved from existing git config or the GitHub API.
+
+```sh
+# Set identity explicitly
+diegops devtools git set --name "Diego Pinto" --email "diego@example.com"
+
+# Resolve from GitHub API (requires gh auth)
+diegops devtools git set
+```
+
+#### gpg
+
+```
+diegops devtools gpg init [--name NAME] [--email EMAIL]
+diegops devtools gpg set
+diegops devtools gpg restart
+```
+
+- **`init`** — generates a GPG identity configuration file. Does not create a key or modify git config. Uses the same identity resolution as `git set`.
+- **`set`** — full GPG setup: generates a GPG key, uploads the public key to GitHub (via `gh`), and configures git to sign commits with the new key.
+- **`restart`** — restarts `gpg-agent`. Useful on Windows where GPG signing can break after a system restart.
+
+```sh
+# Full GPG setup in one command
+diegops devtools gpg set
+
+# Or step by step: generate config first, then complete setup
+diegops devtools gpg init --name "Diego Pinto" --email "diego@example.com"
+diegops devtools gpg set
+
+# Fix signing errors after Windows restart
+diegops devtools gpg restart
+```
+
+#### ssh
+
+```
+diegops devtools ssh list
+diegops devtools ssh config
+diegops devtools ssh create [--name NAME] [--type TYPE] [--email EMAIL]
+```
+
+- **`list`** — shows both local SSH keys (from `~/.ssh/`) and keys registered on GitHub (via `gh` CLI).
+- **`config`** — prints the contents of `~/.ssh/config`.
+- **`create`** — generates a new SSH key. If a key with the same name already exists, the command detects whether a TTY is available: in interactive mode it prompts for resolution; in non-interactive mode (CI/containers) it exits with an error.
+
+```sh
+# List all SSH keys (local + GitHub)
+diegops devtools ssh list
+
+# View SSH config
+diegops devtools ssh config
+
+# Create a new ed25519 key
+diegops devtools ssh create --name github --type ed25519 --email "diego@example.com"
+```
 
 ## Development
 
