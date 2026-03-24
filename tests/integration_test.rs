@@ -191,6 +191,58 @@ fn auth_gh_help_exits_successfully() {
 }
 
 #[test]
+fn devtools_help_exits_successfully() {
+    let output = diegops()
+        .args(["devtools", "--help"])
+        .output()
+        .expect("failed to run diegops devtools --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("git"), "got: {stdout}");
+    assert!(stdout.contains("gpg"), "got: {stdout}");
+    assert!(stdout.contains("ssh"), "got: {stdout}");
+}
+
+#[test]
+fn devtools_git_help_exits_successfully() {
+    let output = diegops()
+        .args(["devtools", "git", "--help"])
+        .output()
+        .expect("failed to run diegops devtools git --help");
+
+    assert!(output.status.success());
+}
+
+#[test]
+fn devtools_gpg_help_exits_successfully() {
+    let output = diegops()
+        .args(["devtools", "gpg", "--help"])
+        .output()
+        .expect("failed to run diegops devtools gpg --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("init"), "got: {stdout}");
+    assert!(stdout.contains("set"), "got: {stdout}");
+    assert!(stdout.contains("restart"), "got: {stdout}");
+}
+
+#[test]
+fn devtools_ssh_help_exits_successfully() {
+    let output = diegops()
+        .args(["devtools", "ssh", "--help"])
+        .output()
+        .expect("failed to run diegops devtools ssh --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("list"), "got: {stdout}");
+    assert!(stdout.contains("config"), "got: {stdout}");
+    assert!(stdout.contains("create"), "got: {stdout}");
+}
+
+#[test]
 fn auth_status_runs_without_config() {
     let output = diegops()
         .args(["auth", "status"])

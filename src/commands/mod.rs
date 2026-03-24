@@ -6,6 +6,10 @@
 pub mod auth;
 pub mod cadi;
 pub mod common;
+pub mod devtools;
+pub mod devtools_git;
+pub mod devtools_gpg;
+pub mod devtools_ssh;
 pub mod repo;
 pub mod update;
 pub mod vault;

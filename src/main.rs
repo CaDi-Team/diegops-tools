@@ -2,6 +2,7 @@ mod commands;
 
 use clap::{CommandFactory, Parser, Subcommand};
 use commands::auth::{AuthCommand, GhCommand};
+use commands::devtools::{DevtoolsCommand, GitCommand, GpgCommand, SshCommand};
 use commands::repo::RepoCommand;
 use commands::vault::VaultCommand;
 
@@ -43,6 +44,11 @@ enum Commands {
     Auth {
         #[command(subcommand)]
         cmd: AuthCommand,
+    },
+    /// Developer tools — GPG, SSH, and git identity setup
+    Devtools {
+        #[command(subcommand)]
+        cmd: DevtoolsCommand,
     },
 }
 
@@ -126,6 +132,39 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             AuthCommand::Logout => {
                 commands::auth::logout_all()?;
             }
+        },
+        Some(Commands::Devtools { cmd }) => match cmd {
+            DevtoolsCommand::Git { cmd: git_cmd } => match git_cmd {
+                GitCommand::Set { name, email } => {
+                    commands::devtools_git::set(name.as_deref(), email.as_deref())?;
+                }
+            },
+            DevtoolsCommand::Gpg { cmd: gpg_cmd } => match gpg_cmd {
+                GpgCommand::Init { name, email } => {
+                    commands::devtools_gpg::init(name.as_deref(), email.as_deref())?;
+                }
+                GpgCommand::Set => {
+                    commands::devtools_gpg::set()?;
+                }
+                GpgCommand::Restart => {
+                    commands::devtools_gpg::restart()?;
+                }
+            },
+            DevtoolsCommand::Ssh { cmd: ssh_cmd } => match ssh_cmd {
+                SshCommand::List => {
+                    commands::devtools_ssh::list()?;
+                }
+                SshCommand::Config => {
+                    commands::devtools_ssh::config()?;
+                }
+                SshCommand::Create {
+                    name,
+                    r#type,
+                    email,
+                } => {
+                    commands::devtools_ssh::create(name.as_deref(), &r#type, email.as_deref())?;
+                }
+            },
         },
     }
     Ok(())
