@@ -113,6 +113,12 @@ Additional rules:
 | `diegops vault apply [--path PREFIX] [--config FILE]` | Pull secrets from Vault and write `.env` files (idempotent) |
 | `diegops vault list [--config FILE]` | Show targets that already have a `.env` file |
 | `diegops vault list-diff [--config FILE]` | Show targets in config but missing `.env` |
+| `diegops auth gh login <PAT>` | Validate and store a GitHub personal access token |
+| `diegops auth gh logout` | Remove stored GitHub token |
+| `diegops auth gh whoami` | Show authenticated GitHub user and token scopes |
+| `diegops auth status` | Show authentication status for all providers |
+| `diegops auth logout` | Remove all stored tokens |
+| `diegops cadi` | Show the DiegOps hero screen |
 | `diegops help` | Show full help |
 
 ### `diegops repo` — workspace management
@@ -150,6 +156,22 @@ Additional rules:
 - `--path` filter: only process targets whose expanded path starts with the given prefix
 - Progress (SKIP/WRITE/FAIL) → stderr; final summary → stdout
 - Shells out to `vault kv get -format=json` via `std::process::Command` — no Vault crate needed; requires `vault` on `$PATH`
+
+### `diegops auth` — credential management
+- Token storage: `~/.diegops/tokens/gh.json` (JSON with `version`, `token`, `stored_at` fields)
+- Token resolution order: stored file > `$GITHUB_TOKEN` env var > unauthenticated
+- `gh login` validates the token via the GitHub API (`GET /user`) before storing
+- `update` command uses stored token for authenticated access to private repo releases
+- File permissions: `0600` on Unix (no-op on Windows)
+- Uses `ureq` for GitHub API calls (same HTTP stack as `update`)
+- `gh whoami` shows the authenticated user and token scopes
+- `auth status` shows authentication status for all configured providers
+- `auth logout` removes all stored tokens; `gh logout` removes only the GitHub token
+- All commands are idempotent: login overwrites, logout succeeds if nothing stored
+
+### `diegops cadi`
+- Displays the DiegOps hero screen with ASCII art branding
+- No arguments, no side effects — purely informational
 
 ### `diegops update` — self-update behaviour
 - Determines its own target triple at **compile time** via `#[cfg]` constants in `src/commands/update.rs`.
