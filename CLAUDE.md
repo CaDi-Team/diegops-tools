@@ -109,6 +109,10 @@ Additional rules:
 | `diegops repo apply [--path PREFIX] [--config FILE]` | Clone all missing repos (idempotent) |
 | `diegops repo list [--config FILE]` | Show repos that are currently cloned locally |
 | `diegops repo list-diff [--config FILE]` | Show repos in config but not cloned locally |
+| `diegops vault init` | Create sample config at `~/.diegops/repo-vault.yaml` (idempotent) |
+| `diegops vault apply [--path PREFIX] [--config FILE]` | Pull secrets from Vault and write `.env` files (idempotent) |
+| `diegops vault list [--config FILE]` | Show targets that already have a `.env` file |
+| `diegops vault list-diff [--config FILE]` | Show targets in config but missing `.env` |
 | `diegops help` | Show full help |
 
 ### `diegops repo` — workspace management
@@ -120,9 +124,36 @@ Additional rules:
 - Progress (SKIP/CLONE/FAIL) → stderr; final summary → stdout
 - Runs `git clone` via `std::process::Command` — no git crate needed; requires `git` on `$PATH`
 
+### `diegops vault` — Vault secret management
+- Config file: `~/.diegops/repo-vault.yaml` (override: `--config` or `$DIEGOPS_VAULT_CONFIG`)
+- `init` creates `~/.diegops/repo-vault.yaml` with a commented sample; skips silently if already exists
+- Format:
+  ```yaml
+  targets:
+    - path: $HOME/github/org/my-app
+      secrets:
+        - vault_path: secret/my-app/database
+          keys:
+            - username
+            - password
+        - vault_path: secret/my-app/api
+          keys: "*"
+  ```
+- `apply` behaviour:
+  - Pre-flight checks: `vault` binary on PATH, `VAULT_ADDR` set, valid token (`vault token lookup`)
+  - Writes `.env` files in `KEY="value"` format (double-quoted, escaped)
+  - Automatically adds `.env` to `.gitignore` if not already present
+  - Content-aware skip: if `.env` already matches, the write is skipped (idempotent)
+  - On Unix, `.env` is created with `0600` permissions
+- `vault_path` is the **logical** Vault path (no `/data/` segment — KV v2 adds it automatically)
+- `keys`: a list of specific key names, or `"*"` to pull all keys; key names are case-preserved
+- `--path` filter: only process targets whose expanded path starts with the given prefix
+- Progress (SKIP/WRITE/FAIL) → stderr; final summary → stdout
+- Shells out to `vault kv get -format=json` via `std::process::Command` — no Vault crate needed; requires `vault` on `$PATH`
+
 ### `diegops update` — self-update behaviour
 - Determines its own target triple at **compile time** via `#[cfg]` constants in `src/commands/update.rs`.
-- Calls `GET https://api.github.com/repos/dpinto-config/diegops-tools/releases/latest` (GitHub API).
+- Calls `GET https://api.github.com/repos/CaDi-Team/diegops-tools/releases/latest` (GitHub API).
 - Finds the matching asset by suffix `<target>.tar.gz` (Unix) or `<target>.zip` (Windows).
 - Downloads with `ureq` (sync, rustls TLS — no OpenSSL dependency).
 - Extracts with `flate2`+`tar` (Unix) or `zip` (Windows).
