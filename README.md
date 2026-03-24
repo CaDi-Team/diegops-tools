@@ -118,6 +118,14 @@ diegops vault apply --path <prefix>                Pull only for targets under t
 diegops vault apply --config <file>                Use a custom repo-vault.yaml
 diegops vault list                                 Show targets that have a .env file
 diegops vault list-diff                            Show targets missing a .env file
+
+diegops auth gh login <PAT>                        Validate and store a GitHub token
+diegops auth gh logout                             Remove stored GitHub token
+diegops auth gh whoami                             Show authenticated GitHub user
+diegops auth status                                Show authentication status
+diegops auth logout                                Remove all stored tokens
+
+diegops cadi                                       Show the DiegOps hero screen
 ```
 
 ### `diegops repo` — repository workspace
@@ -239,6 +247,38 @@ diegops vault list
 - `.gitignore` is automatically updated to include `.env` if not already present.
 
 > **Idempotency:** `apply` compares the new `.env` content with the existing file and skips the write if unchanged — safe to run repeatedly.
+
+### `diegops auth` — credential management
+
+Manages authentication tokens for external services. Currently supports GitHub personal access tokens (PATs), with room for additional providers in the future.
+
+```
+diegops auth gh login <PAT>              Validate and store a GitHub token
+diegops auth gh logout                   Remove stored GitHub token
+diegops auth gh whoami                   Show authenticated GitHub user
+diegops auth status                      Show authentication status for all providers
+diegops auth logout                      Remove all stored tokens
+```
+
+**Token storage:** tokens are stored in `~/.diegops/tokens/` (e.g., `gh.json`). On Unix, files are created with `0600` permissions.
+
+**Token resolution order:** stored token file > `$GITHUB_TOKEN` environment variable > unauthenticated.
+
+**Getting started:**
+
+```sh
+diegops auth gh login ghp_xxxxxxxxxxxx   # validate and store your GitHub PAT
+diegops auth status                      # check authentication status
+diegops auth gh whoami                   # show authenticated user and token scopes
+```
+
+> **Security note:** passing a PAT on the command line may expose it in shell history. Consider prefixing the command with a space (most shells exclude space-prefixed commands from history) or using `$GITHUB_TOKEN` instead.
+
+> **Idempotency:** `gh login` validates and overwrites any previously stored token. `gh logout` succeeds silently if no token is stored. All commands are safe to run repeatedly.
+
+### `diegops cadi`
+
+Displays the DiegOps hero screen with ASCII art branding.
 
 ## Development
 
