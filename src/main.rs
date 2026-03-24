@@ -2,6 +2,7 @@ mod commands;
 
 use clap::{CommandFactory, Parser, Subcommand};
 use commands::repo::RepoCommand;
+use commands::vault::VaultCommand;
 
 #[derive(Parser)]
 #[command(
@@ -29,6 +30,11 @@ enum Commands {
     Repo {
         #[command(subcommand)]
         cmd: RepoCommand,
+    },
+    /// Manage Vault secrets — pull secrets and write .env files from a config file
+    Vault {
+        #[command(subcommand)]
+        cmd: VaultCommand,
     },
 }
 
@@ -65,6 +71,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 RepoCommand::Init => {
                     commands::repo::init()?;
+                }
+            }
+        }
+        Some(Commands::Vault { cmd }) => {
+            let config_path_str;
+            match cmd {
+                VaultCommand::Apply { path, config } => {
+                    config_path_str = config;
+                    let cfg = config_path_str.as_deref().map(std::path::Path::new);
+                    commands::vault::apply(cfg, path.as_deref())?;
+                }
+                VaultCommand::List { config } => {
+                    config_path_str = config;
+                    let cfg = config_path_str.as_deref().map(std::path::Path::new);
+                    commands::vault::list(cfg)?;
+                }
+                VaultCommand::ListDiff { config } => {
+                    config_path_str = config;
+                    let cfg = config_path_str.as_deref().map(std::path::Path::new);
+                    commands::vault::list_diff(cfg)?;
+                }
+                VaultCommand::Init => {
+                    commands::vault::init(None)?;
                 }
             }
         }

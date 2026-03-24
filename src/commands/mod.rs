@@ -6,3 +6,4 @@
 pub mod common;
 pub mod repo;
 pub mod update;
+pub mod vault;
