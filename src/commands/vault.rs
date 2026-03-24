@@ -65,36 +65,63 @@ pub enum VaultCommand {
 // Config structures
 // ---------------------------------------------------------------------------
 
-#[allow(dead_code)]
 #[derive(Deserialize)]
 struct VaultConfig {
     targets: Vec<Target>,
 }
 
-#[allow(dead_code)]
 #[derive(Deserialize)]
 struct Target {
     path: String,
     secrets: Vec<SecretEntry>,
 }
 
-#[allow(dead_code)]
 #[derive(Deserialize)]
 struct SecretEntry {
     vault_path: String,
     keys: KeySelector,
 }
 
-#[allow(dead_code)]
 #[derive(Deserialize)]
 #[serde(untagged)]
+#[allow(dead_code)] // inner fields used by `apply` (next task) and tests
 enum KeySelector {
     All(String),
     List(Vec<String>),
 }
 
 // ---------------------------------------------------------------------------
-// Public entry points (stubs)
+// Config loading
+// ---------------------------------------------------------------------------
+
+/// Loads and validates the vault config from the resolved path.
+fn load_config(path: Option<&Path>) -> Result<VaultConfig, Box<dyn std::error::Error>> {
+    let config_path =
+        super::common::resolve_config_path(path, "DIEGOPS_VAULT_CONFIG", "repo-vault.yaml")?;
+    let content = super::common::read_config_file(&config_path)?;
+    let config: VaultConfig = serde_yaml::from_str(&content)
+        .map_err(|e| format!("invalid vault config {}: {e}", config_path.display()))?;
+
+    // Validate KeySelector::All values — must be exactly "*"
+    for target in &config.targets {
+        for entry in &target.secrets {
+            if let KeySelector::All(ref s) = entry.keys {
+                if s != "*" {
+                    return Err(format!(
+                        "invalid key selector '{}' for vault_path '{}' — use \"*\" or a list of key names",
+                        s, entry.vault_path
+                    )
+                    .into());
+                }
+            }
+        }
+    }
+
+    Ok(config)
+}
+
+// ---------------------------------------------------------------------------
+// Public entry points
 // ---------------------------------------------------------------------------
 
 /// Pulls secrets from Vault and writes `.env` files for each target.
@@ -106,13 +133,44 @@ pub fn apply(
 }
 
 /// Lists targets that already have a `.env` file.
-pub fn list(_config_path: Option<&std::path::Path>) -> Result<(), Box<dyn std::error::Error>> {
-    todo!("vault list")
+pub fn list(config_path: Option<&Path>) -> Result<(), Box<dyn std::error::Error>> {
+    let config = load_config(config_path)?;
+    let mut total: usize = 0;
+
+    for target in &config.targets {
+        let dest = super::common::expand_home(&target.path);
+        if dest.join(".env").exists() {
+            println!("{}", target.path);
+            total += 1;
+        }
+    }
+
+    eprintln!("{total} targets with .env files.");
+    Ok(())
 }
 
 /// Lists targets in config that do NOT have a `.env` file.
-pub fn list_diff(_config_path: Option<&std::path::Path>) -> Result<(), Box<dyn std::error::Error>> {
-    todo!("vault list-diff")
+pub fn list_diff(config_path: Option<&Path>) -> Result<(), Box<dyn std::error::Error>> {
+    let config = load_config(config_path)?;
+    let mut total: usize = 0;
+
+    for target in &config.targets {
+        let dest = super::common::expand_home(&target.path);
+        if !dest.join(".env").exists() {
+            println!("{}", target.path);
+            total += 1;
+        }
+    }
+
+    if total == 0 {
+        println!("All targets have .env files.");
+    } else {
+        eprintln!(
+            "{total} targets missing .env files. Run `diegops vault apply` to generate them."
+        );
+    }
+
+    Ok(())
 }
 
 /// Creates `~/.diegops/repo-vault.yaml` with a sample config.
@@ -192,5 +250,41 @@ mod tests {
         init(Some(&dir)).unwrap();
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn parse_config_with_explicit_keys() {
+        let yaml = r#"
+targets:
+  - path: $HOME/github/org/app
+    secrets:
+      - vault_path: secret/app/db
+        keys:
+          - username
+          - password
+"#;
+        let config: VaultConfig = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(config.targets.len(), 1);
+        assert_eq!(config.targets[0].secrets.len(), 1);
+        match &config.targets[0].secrets[0].keys {
+            KeySelector::List(keys) => assert_eq!(keys, &["username", "password"]),
+            KeySelector::All(_) => panic!("expected List"),
+        }
+    }
+
+    #[test]
+    fn parse_config_with_wildcard_keys() {
+        let yaml = r#"
+targets:
+  - path: $HOME/github/org/app
+    secrets:
+      - vault_path: secret/app/api
+        keys: "*"
+"#;
+        let config: VaultConfig = serde_yaml::from_str(yaml).unwrap();
+        match &config.targets[0].secrets[0].keys {
+            KeySelector::All(s) => assert_eq!(s, "*"),
+            KeySelector::List(_) => panic!("expected All"),
+        }
     }
 }
