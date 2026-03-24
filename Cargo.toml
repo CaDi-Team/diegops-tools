@@ -28,7 +28,7 @@ tar = "0.4"
 
 # Windows target: extract .zip release archives
 [target.'cfg(windows)'.dependencies]
-zip = "2"
+zip = "8"
 
 [profile.release]
 opt-level = "z"      # Minimize binary size
