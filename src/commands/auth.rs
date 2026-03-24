@@ -64,13 +64,11 @@ fn tokens_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
 }
 
 /// Formats the current time as an RFC 3339 timestamp.
-#[allow(dead_code)] // used by save_gh_token, wired in Task 5
 fn format_rfc3339_now() -> String {
     humantime::format_rfc3339(std::time::SystemTime::now()).to_string()
 }
 
 /// Saves a GitHub token to the given directory.
-#[allow(dead_code)] // used by save_gh_token, wired in Task 5
 fn save_gh_token_to(dir: &Path, token: &str) -> Result<(), Box<dyn std::error::Error>> {
     fs::create_dir_all(dir)?;
     let data = TokenData {
@@ -91,7 +89,6 @@ fn save_gh_token_to(dir: &Path, token: &str) -> Result<(), Box<dyn std::error::E
 }
 
 /// Loads a GitHub token from the given directory. Returns `None` if file absent.
-#[allow(dead_code)] // used by load_gh_token, wired in Task 6
 fn load_gh_token_from(dir: &Path) -> Result<Option<String>, Box<dyn std::error::Error>> {
     let path = dir.join("gh.json");
     if !path.exists() {
@@ -128,13 +125,11 @@ fn remove_gh_token_from(dir: &Path) -> Result<bool, Box<dyn std::error::Error>> 
 // ---------------------------------------------------------------------------
 
 /// Saves a GitHub token to `~/.diegops/tokens/gh.json`.
-#[allow(dead_code)] // wired in Task 5 (gh login)
 pub fn save_gh_token(token: &str) -> Result<(), Box<dyn std::error::Error>> {
     save_gh_token_to(&tokens_dir()?, token)
 }
 
 /// Loads the GitHub token. Resolution: file > $GITHUB_TOKEN > None.
-#[allow(dead_code)] // wired in Task 6 (update uses token)
 pub fn load_gh_token() -> Result<Option<String>, Box<dyn std::error::Error>> {
     let from_file = load_gh_token_from(&tokens_dir()?)?;
     if from_file.is_some() {
@@ -180,13 +175,70 @@ pub fn remove_all_tokens() -> Result<usize, Box<dyn std::error::Error>> {
 // ---------------------------------------------------------------------------
 
 /// Validates and stores a GitHub PAT.
-pub fn gh_login(_token: &str) -> Result<(), Box<dyn std::error::Error>> {
-    todo!("auth gh login")
+pub fn gh_login(token: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let ua = format!("diegops/{}", env!("CARGO_PKG_VERSION"));
+    let response = ureq::get("https://api.github.com/user")
+        .set("User-Agent", &ua)
+        .set("Authorization", &format!("Bearer {token}"))
+        .set("Accept", "application/vnd.github.v3+json")
+        .call();
+
+    match response {
+        Ok(resp) => {
+            let json: serde_json::Value = resp.into_json()?;
+            let login = json["login"]
+                .as_str()
+                .ok_or("GitHub API response missing 'login'")?;
+            save_gh_token(token)?;
+            println!("Authenticated as {login}");
+            Ok(())
+        }
+        Err(ureq::Error::Status(401 | 403, _)) => {
+            Err("token validation failed — check that your PAT is valid and not expired".into())
+        }
+        Err(ureq::Error::Status(code, _)) => {
+            Err(format!("GitHub API returned unexpected status {code}").into())
+        }
+        Err(ureq::Error::Transport(_)) => {
+            Err("could not reach GitHub API. Check your connection".into())
+        }
+    }
 }
 
 /// Shows the authenticated GitHub user.
 pub fn gh_whoami() -> Result<(), Box<dyn std::error::Error>> {
-    todo!("auth gh whoami")
+    let token =
+        load_gh_token()?.ok_or("not authenticated. Run 'diegops auth gh login <PAT>' first")?;
+
+    let ua = format!("diegops/{}", env!("CARGO_PKG_VERSION"));
+    let response = ureq::get("https://api.github.com/user")
+        .set("User-Agent", &ua)
+        .set("Authorization", &format!("Bearer {token}"))
+        .set("Accept", "application/vnd.github.v3+json")
+        .call();
+
+    match response {
+        Ok(resp) => {
+            let scopes = resp
+                .header("x-oauth-scopes")
+                .unwrap_or("(none)")
+                .to_string();
+            let json: serde_json::Value = resp.into_json()?;
+            let login = json["login"]
+                .as_str()
+                .ok_or("GitHub API response missing 'login'")?;
+            println!("Logged in as: {login}");
+            println!("Token scopes: {scopes}");
+            Ok(())
+        }
+        Err(ureq::Error::Status(401 | 403, _)) => {
+            Err("stored GitHub token is no longer valid. Run 'diegops auth gh login <PAT>' to update it".into())
+        }
+        Err(ureq::Error::Transport(_)) => {
+            Err("could not reach GitHub API. Check your connection".into())
+        }
+        Err(e) => Err(format!("GitHub API error: {e}").into()),
+    }
 }
 
 /// Removes the stored GitHub token.
