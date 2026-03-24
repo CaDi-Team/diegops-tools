@@ -1,6 +1,7 @@
 mod commands;
 
 use clap::{CommandFactory, Parser, Subcommand};
+use commands::auth::{AuthCommand, GhCommand};
 use commands::repo::RepoCommand;
 use commands::vault::VaultCommand;
 
@@ -37,6 +38,11 @@ enum Commands {
     Vault {
         #[command(subcommand)]
         cmd: VaultCommand,
+    },
+    /// Manage authentication tokens for external services
+    Auth {
+        #[command(subcommand)]
+        cmd: AuthCommand,
     },
 }
 
@@ -102,6 +108,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
+        Some(Commands::Auth { cmd }) => match cmd {
+            AuthCommand::Gh { cmd: gh_cmd } => match gh_cmd {
+                GhCommand::Login { token } => {
+                    commands::auth::gh_login(&token)?;
+                }
+                GhCommand::Logout => {
+                    commands::auth::gh_logout()?;
+                }
+                GhCommand::Whoami => {
+                    commands::auth::gh_whoami()?;
+                }
+            },
+            AuthCommand::Status => {
+                commands::auth::status()?;
+            }
+            AuthCommand::Logout => {
+                commands::auth::logout_all()?;
+            }
+        },
     }
     Ok(())
 }
