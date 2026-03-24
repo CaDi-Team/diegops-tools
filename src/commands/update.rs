@@ -52,8 +52,7 @@ compile_error!(
     "diegops update: unsupported target platform — add a CURRENT_TARGET constant for this target"
 );
 
-const RELEASES_API: &str =
-    "https://api.github.com/repos/dpinto-config/diegops-tools/releases/latest";
+const RELEASES_API: &str = "https://api.github.com/repos/CaDi-Team/diegops-tools/releases/latest";
 
 // ---------------------------------------------------------------------------
 // Public entry point
