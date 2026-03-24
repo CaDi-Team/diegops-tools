@@ -119,6 +119,13 @@ Additional rules:
 | `diegops auth status` | Show authentication status for all providers |
 | `diegops auth logout` | Remove all stored tokens |
 | `diegops cadi` | Show the DiegOps hero screen |
+| `diegops devtools git set [--name NAME] [--email EMAIL]` | Set git global user.name and user.email |
+| `diegops devtools gpg init [--name NAME] [--email EMAIL]` | Generate GPG identity config |
+| `diegops devtools gpg set` | Generate GPG key, upload to GitHub, configure signing |
+| `diegops devtools gpg restart` | Restart gpg-agent |
+| `diegops devtools ssh list` | List local and GitHub SSH keys |
+| `diegops devtools ssh config` | Print `~/.ssh/config` |
+| `diegops devtools ssh create [--name N] [--type T] [--email E]` | Create a new SSH key |
 | `diegops help` | Show full help |
 
 ### `diegops repo` — workspace management
@@ -168,6 +175,43 @@ Additional rules:
 - `auth status` shows authentication status for all configured providers
 - `auth logout` removes all stored tokens; `gh logout` removes only the GitHub token
 - All commands are idempotent: login overwrites, logout succeeds if nothing stored
+
+### `diegops devtools` — developer workstation setup
+- Automates identity and tooling configuration for a fresh developer workstation
+- **Identity resolution order:** `--name`/`--email` flags > `git config` values > GitHub API (via `gh` CLI)
+- All subcommands are idempotent
+
+#### `devtools git set`
+- Sets `git config --global user.name` and `user.email`
+- If `--name`/`--email` omitted, resolves from existing git config or GitHub API (`gh api /user`)
+- Requires `git` on `$PATH`; `gh` needed only for API fallback
+
+#### `devtools gpg init`
+- Generates a GPG identity configuration file (does not create a key)
+- Accepts `--name`/`--email` with same resolution order as `git set`
+- Requires `gpg` on `$PATH`
+
+#### `devtools gpg set`
+- Full GPG setup: generates a GPG key, uploads public key to GitHub, configures git commit signing
+- Requires `gpg` and `gh` (authenticated) on `$PATH`
+- Idempotent: skips key generation if a matching key already exists
+
+#### `devtools gpg restart`
+- Restarts `gpg-agent` — fixes Windows post-restart signing errors
+- Requires `gpg` on `$PATH`
+
+#### `devtools ssh list`
+- Shows local SSH keys (from `~/.ssh/`) and keys registered on GitHub (via `gh ssh-key list`)
+- Requires `gh` (authenticated) for GitHub key listing
+
+#### `devtools ssh config`
+- Prints the contents of `~/.ssh/config` to stdout
+
+#### `devtools ssh create`
+- Generates a new SSH key via `ssh-keygen`
+- Accepts `--name`, `--type` (key algorithm), `--email` (key comment)
+- TTY detection for name conflict resolution: interactive mode prompts the user; non-interactive mode (CI/containers) exits with error
+- Requires `ssh-keygen` on `$PATH`
 
 ### `diegops cadi`
 - Displays the DiegOps hero screen with ASCII art branding
