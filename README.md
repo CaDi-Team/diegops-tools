@@ -1,6 +1,6 @@
 # diegops
 
-[![CI](https://github.com/dpinto-config/diegops-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/dpinto-config/diegops-tools/actions/workflows/ci.yml)
+[![CI](https://github.com/CaDi-Team/diegops-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/CaDi-Team/diegops-tools/actions/workflows/ci.yml)
 [![License: Proprietary](https://img.shields.io/badge/License-Proprietary-red.svg)](LICENSE)
 
 Personal productivity CLI for humans and containers.
@@ -26,7 +26,7 @@ Download the binary for your platform from the [latest release](../../releases/l
 ### Linux / macOS — one-liner (auto-detects latest version and platform)
 
 ```sh
-curl -fsSL "https://api.github.com/repos/dpinto-config/diegops-tools/releases/latest" \
+curl -fsSL "https://api.github.com/repos/CaDi-Team/diegops-tools/releases/latest" \
   | grep '"browser_download_url"' \
   | grep "$(uname -s | tr '[:upper:]' '[:lower:]' | sed 's/darwin/apple-darwin/;s/linux/unknown-linux-gnu/')-$(uname -m | sed 's/x86_64/x86_64/;s/arm64/aarch64/')" \
   | cut -d'"' -f4 \
@@ -38,26 +38,26 @@ sudo mv diegops /usr/local/bin/diegops
 Or pick a specific version and target manually:
 
 ```sh
-VERSION=$(curl -fsSL https://api.github.com/repos/dpinto-config/diegops-tools/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
+VERSION=$(curl -fsSL https://api.github.com/repos/CaDi-Team/diegops-tools/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
 TARGET=x86_64-unknown-linux-gnu   # see table above for your target
 
-curl -fsSL "https://github.com/dpinto-config/diegops-tools/releases/download/${VERSION}/diegops-${VERSION}-${TARGET}.tar.gz" \
+curl -fsSL "https://github.com/CaDi-Team/diegops-tools/releases/download/${VERSION}/diegops-${VERSION}-${TARGET}.tar.gz" \
   | tar -xz
 sudo mv diegops /usr/local/bin/diegops
 ```
 
 **Alpine / musl (containers):**
 ```sh
-VERSION=$(curl -fsSL https://api.github.com/repos/dpinto-config/diegops-tools/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
+VERSION=$(curl -fsSL https://api.github.com/repos/CaDi-Team/diegops-tools/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
 ARCH=$(uname -m | sed 's/x86_64/x86_64/;s/aarch64/aarch64/')
-curl -fsSL "https://github.com/dpinto-config/diegops-tools/releases/download/${VERSION}/diegops-${VERSION}-${ARCH}-unknown-linux-musl.tar.gz" \
+curl -fsSL "https://github.com/CaDi-Team/diegops-tools/releases/download/${VERSION}/diegops-${VERSION}-${ARCH}-unknown-linux-musl.tar.gz" \
   | tar -xz -C /usr/local/bin
 ```
 
 ### Windows (PowerShell)
 
 ```powershell
-$repo    = "dpinto-config/diegops-tools"
+$repo    = "CaDi-Team/diegops-tools"
 $version = (Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest").tag_name
 $target  = "x86_64-pc-windows-gnu"
 $url     = "https://github.com/$repo/releases/download/$version/diegops-$version-$target.zip"
@@ -72,15 +72,15 @@ Expand-Archive -Path diegops.zip -DestinationPath "$env:USERPROFILE\bin" -Force
 ```sh
 # Alpine (musl static — no apk packages needed beyond curl and tar)
 apk add --no-cache curl tar
-VERSION=$(curl -fsSL https://api.github.com/repos/dpinto-config/diegops-tools/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
-curl -fsSL "https://github.com/dpinto-config/diegops-tools/releases/download/${VERSION}/diegops-${VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+VERSION=$(curl -fsSL https://api.github.com/repos/CaDi-Team/diegops-tools/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
+curl -fsSL "https://github.com/CaDi-Team/diegops-tools/releases/download/${VERSION}/diegops-${VERSION}-x86_64-unknown-linux-musl.tar.gz" \
   | tar -xz -C /usr/local/bin
 ```
 
 ```sh
 # Ubuntu / Debian
-VERSION=$(curl -fsSL https://api.github.com/repos/dpinto-config/diegops-tools/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
-curl -fsSL "https://github.com/dpinto-config/diegops-tools/releases/download/${VERSION}/diegops-${VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
+VERSION=$(curl -fsSL https://api.github.com/repos/CaDi-Team/diegops-tools/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
+curl -fsSL "https://github.com/CaDi-Team/diegops-tools/releases/download/${VERSION}/diegops-${VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
   | tar -xz -C /usr/local/bin
 ```
 
@@ -111,6 +111,13 @@ diegops repo apply --path <prefix>                 Clone only repos under this p
 diegops repo apply --config <file>                 Use a custom repos.yaml
 diegops repo list                                  Show repos already cloned locally
 diegops repo list-diff                             Show repos in config but not yet cloned
+
+diegops vault init                                 Create sample config at ~/.diegops/repo-vault.yaml
+diegops vault apply                                Pull secrets and write .env files
+diegops vault apply --path <prefix>                Pull only for targets under this path prefix
+diegops vault apply --config <file>                Use a custom repo-vault.yaml
+diegops vault list                                 Show targets that have a .env file
+diegops vault list-diff                            Show targets missing a .env file
 ```
 
 ### `diegops repo` — repository workspace
@@ -164,6 +171,74 @@ diegops repo list
 ```
 
 > **Idempotency:** `apply` skips repos whose directory already contains a `.git` folder — safe to run repeatedly.
+
+### `diegops vault` — secret management
+
+Pulls secrets from [HashiCorp Vault](https://www.vaultproject.io/) KV v2 and writes `.env` files into your repository directories.
+
+```
+diegops vault init                        Create a sample config in ~/.diegops/
+diegops vault apply                       Pull secrets and write .env files (idempotent)
+diegops vault apply --path <prefix>       Pull only for targets under this path prefix
+diegops vault apply --config <file>       Use a custom repo-vault.yaml file
+diegops vault list                        Show targets that already have a .env file
+diegops vault list-diff                   Show targets in config but missing a .env file
+```
+
+**Getting started:**
+
+```sh
+diegops vault init         # creates ~/.diegops/repo-vault.yaml with a commented sample
+# edit ~/.diegops/repo-vault.yaml to add your Vault paths and keys
+diegops vault apply        # pull secrets and write .env files
+```
+
+**Config file** (`~/.diegops/repo-vault.yaml`) format:
+
+```yaml
+targets:
+  - path: $HOME/github/my-org/products/my-product
+    secrets:
+      - vault_path: secret/my-product/database
+        keys:
+          - username
+          - password
+      - vault_path: secret/my-product/api
+        keys: "*"
+```
+
+**Default config location:** `~/.diegops/repo-vault.yaml`
+Override with `--config <path>` or `$DIEGOPS_VAULT_CONFIG`.
+
+**Examples:**
+
+```sh
+# Pull all secrets defined in the config
+diegops vault apply
+
+# Pull only secrets for one workspace
+diegops vault apply --path '$HOME/github/my-org/products/my-product'
+
+# See which targets are missing a .env file
+diegops vault list-diff
+
+# See which targets already have a .env file
+diegops vault list
+```
+
+**Prerequisites:**
+- The `vault` CLI must be installed and on your `PATH`.
+- You must be authenticated (`vault login`).
+- `VAULT_ADDR` must be set in your environment.
+
+**Key behavior:**
+- `vault_path` uses the **logical** Vault path (no `/data/` segment — Vault KV v2 adds it automatically).
+- `keys` can be a list of specific key names or `"*"` to pull all keys from the path.
+- Values are written as-is with case-preserved key names.
+- `.env` is fully overwritten on each run; content-aware skip avoids unnecessary writes.
+- `.gitignore` is automatically updated to include `.env` if not already present.
+
+> **Idempotency:** `apply` compares the new `.env` content with the existing file and skips the write if unchanged — safe to run repeatedly.
 
 ## Development
 
