@@ -1,6 +1,6 @@
 [package]
 name = "diegops"
-version = "1.0.4"
+version = "1.0.5"
 edition = "2021"
 description = "diegops — personal productivity CLI for humans and containers"
 license = "UNLICENSED"
@@ -20,6 +20,7 @@ serde_json = "1"
 serde = { version = "1", features = ["derive"] }
 # serde_yaml 0.9 is archived upstream but stable for this format.
 serde_yaml = "0.9"
+humantime = "2"
 
 # Unix targets: extract .tar.gz release archives
 [target.'cfg(unix)'.dependencies]
