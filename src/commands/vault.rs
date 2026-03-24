@@ -85,7 +85,6 @@ struct SecretEntry {
 
 #[derive(Deserialize)]
 #[serde(untagged)]
-#[allow(dead_code)] // inner fields used by `apply` (next task) and tests
 enum KeySelector {
     All(String),
     List(Vec<String>),
@@ -127,10 +126,144 @@ fn load_config(path: Option<&Path>) -> Result<VaultConfig, Box<dyn std::error::E
 
 /// Pulls secrets from Vault and writes `.env` files for each target.
 pub fn apply(
-    _config_path: Option<&std::path::Path>,
-    _path_filter: Option<&str>,
+    config_path: Option<&Path>,
+    path_filter: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    todo!("vault apply")
+    // Pre-flight checks — fatal, exit immediately on failure
+    check_vault_binary()?;
+    check_vault_addr()?;
+    check_vault_auth()?;
+
+    let config = load_config(config_path)?;
+    let filter = path_filter.map(super::common::expand_home);
+
+    let mut n_written: usize = 0;
+    let mut n_skipped: usize = 0;
+    let mut failures: Vec<String> = Vec::new();
+
+    for target in &config.targets {
+        let dest = super::common::expand_home(&target.path);
+
+        if let Some(ref f) = filter {
+            if !dest.starts_with(f) {
+                continue;
+            }
+        }
+
+        eprintln!("\n{}", target.path);
+
+        if !dest.exists() {
+            eprintln!(
+                "  FAIL  target directory '{}' does not exist. Clone the repo first",
+                dest.display()
+            );
+            failures.push(format!("{} (directory missing)", target.path));
+            continue;
+        }
+
+        // Collect secrets for this target
+        let mut all_secrets: Vec<(String, String)> = Vec::new();
+        let mut target_failed = false;
+
+        for entry in &target.secrets {
+            match vault_kv_get(&entry.vault_path) {
+                Ok(data) => match &entry.keys {
+                    KeySelector::All(s) if s == "*" => {
+                        for (k, v) in &data {
+                            all_secrets.push((
+                                k.clone(),
+                                v.as_str().unwrap_or(&v.to_string()).to_string(),
+                            ));
+                        }
+                    }
+                    KeySelector::All(s) => {
+                        eprintln!("  FAIL  invalid key selector '{}' (expected \"*\")", s);
+                        target_failed = true;
+                        break;
+                    }
+                    KeySelector::List(keys) => {
+                        let available: Vec<&String> = data.keys().collect();
+                        for key in keys {
+                            match data.get(key) {
+                                Some(v) => {
+                                    all_secrets.push((
+                                        key.clone(),
+                                        v.as_str().unwrap_or(&v.to_string()).to_string(),
+                                    ));
+                                }
+                                None => {
+                                    eprintln!(
+                                        "  FAIL  key '{}' not found at '{}'. Available keys: {:?}",
+                                        key, entry.vault_path, available
+                                    );
+                                    target_failed = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                },
+                Err(e) => {
+                    eprintln!("  FAIL  {e}");
+                    target_failed = true;
+                }
+            }
+            if target_failed {
+                break;
+            }
+        }
+
+        if target_failed {
+            failures.push(target.path.clone());
+            continue;
+        }
+
+        // Build .env content and check if it changed
+        let env_content = build_env_content(&all_secrets);
+        let env_path = dest.join(".env");
+
+        if env_path.exists() {
+            if let Ok(existing) = fs::read_to_string(&env_path) {
+                if existing == env_content {
+                    eprintln!("  SKIP  .env unchanged");
+                    n_skipped += 1;
+                    continue;
+                }
+            }
+        }
+
+        // Write .env
+        fs::write(&env_path, &env_content)?;
+
+        // Set file permissions to 0600 on Unix
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&env_path, fs::Permissions::from_mode(0o600))?;
+        }
+
+        // Update .gitignore
+        ensure_gitignore(&dest)?;
+
+        eprintln!("  WRITE .env ({} secrets)", all_secrets.len());
+        n_written += 1;
+    }
+
+    eprintln!();
+    println!(
+        "Done: {n_written} written, {n_skipped} unchanged, {} failed",
+        failures.len()
+    );
+
+    if !failures.is_empty() {
+        eprintln!("\nFailed targets:");
+        for f in &failures {
+            eprintln!("  {f}");
+        }
+        return Err(format!("{} target(s) failed", failures.len()).into());
+    }
+
+    Ok(())
 }
 
 /// Lists targets that already have a `.env` file.
@@ -225,18 +358,50 @@ targets:
 ";
 
 // ---------------------------------------------------------------------------
-// Internal helpers — used by `apply` (next task)
+// Internal helpers
 // ---------------------------------------------------------------------------
 
+/// Ensures `.env` is listed in the target directory's `.gitignore`.
+fn ensure_gitignore(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let gitignore = dir.join(".gitignore");
+
+    if gitignore.exists() {
+        let content = fs::read_to_string(&gitignore)?;
+        // Exact line match
+        if content.lines().any(|line| line.trim() == ".env") {
+            return Ok(());
+        }
+        // Ensure preceding newline
+        let prefix = if content.ends_with('\n') || content.is_empty() {
+            ""
+        } else {
+            "\n"
+        };
+        fs::write(&gitignore, format!("{content}{prefix}.env\n"))?;
+    } else {
+        fs::write(&gitignore, ".env\n")?;
+    }
+
+    Ok(())
+}
+
+/// Builds the `.env` file content from a list of (key, value) pairs.
+fn build_env_content(secrets: &[(String, String)]) -> String {
+    let mut content = String::from("# Generated by diegops vault apply — do not edit\n");
+    for (key, value) in secrets {
+        content.push_str(&format_env_line(key, value));
+        content.push('\n');
+    }
+    content
+}
+
 /// Formats a single `.env` line with double-quoted, escaped value.
-#[allow(dead_code)] // used by `apply` (next task)
 fn format_env_line(key: &str, value: &str) -> String {
     let escaped = value.replace('\\', r"\\").replace('"', r#"\""#);
     format!("{key}=\"{escaped}\"")
 }
 
 /// Checks that the `vault` CLI is available on PATH.
-#[allow(dead_code)] // used by `apply` (next task)
 fn check_vault_binary() -> Result<(), Box<dyn std::error::Error>> {
     match Command::new("vault").arg("--version").output() {
         Ok(output) if output.status.success() => Ok(()),
@@ -249,7 +414,6 @@ fn check_vault_binary() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Checks that VAULT_ADDR is set.
-#[allow(dead_code)] // used by `apply` (next task)
 fn check_vault_addr() -> Result<(), Box<dyn std::error::Error>> {
     if std::env::var("VAULT_ADDR").is_err() {
         return Err("VAULT_ADDR is not set. Export it or configure your Vault client".into());
@@ -258,7 +422,6 @@ fn check_vault_addr() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Checks that the current Vault token is valid.
-#[allow(dead_code)] // used by `apply` (next task)
 fn check_vault_auth() -> Result<(), Box<dyn std::error::Error>> {
     let output = Command::new("vault")
         .args(["token", "lookup"])
@@ -275,7 +438,6 @@ fn check_vault_auth() -> Result<(), Box<dyn std::error::Error>> {
 /// Fetches all key-value pairs from a Vault KV v2 path.
 ///
 /// Returns a map of key → value. On error, returns a user-friendly message.
-#[allow(dead_code)] // used by `apply` (next task)
 fn vault_kv_get(
     vault_path: &str,
 ) -> Result<serde_json::Map<String, serde_json::Value>, Box<dyn std::error::Error>> {
@@ -307,7 +469,6 @@ fn vault_kv_get(
 /// Parses the JSON response from `vault kv get -format=json`.
 ///
 /// Extracted for testability — the JSON structure is `{ "data": { "data": { ... } } }`.
-#[allow(dead_code)] // used by `vault_kv_get` above and tests
 fn parse_vault_response(
     json_bytes: &[u8],
     vault_path: &str,
@@ -424,5 +585,43 @@ targets:
     fn parse_vault_response_rejects_bad_json() {
         let json = br#"{"data": {"wrong": "shape"}}"#;
         assert!(parse_vault_response(json, "secret/test").is_err());
+    }
+
+    #[test]
+    fn ensure_gitignore_adds_env_entry() {
+        let dir =
+            std::env::temp_dir().join(format!("diegops-test-gitignore-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        // No .gitignore exists — should create one
+        ensure_gitignore(&dir).unwrap();
+        let content = fs::read_to_string(dir.join(".gitignore")).unwrap();
+        assert!(content.contains(".env"));
+
+        // Already present — should not duplicate
+        ensure_gitignore(&dir).unwrap();
+        let content = fs::read_to_string(dir.join(".gitignore")).unwrap();
+        assert_eq!(content.matches(".env").count(), 1);
+
+        // .gitignore without trailing newline
+        fs::write(dir.join(".gitignore"), "node_modules").unwrap();
+        ensure_gitignore(&dir).unwrap();
+        let content = fs::read_to_string(dir.join(".gitignore")).unwrap();
+        assert!(content.contains("node_modules\n.env"));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn build_env_content_formats_correctly() {
+        let mut secrets = Vec::new();
+        secrets.push(("db_pass".to_string(), "s3cret".to_string()));
+        secrets.push(("api_key".to_string(), "tok \"en".to_string()));
+
+        let content = build_env_content(&secrets);
+        assert!(content.starts_with("# Generated by diegops vault apply"));
+        assert!(content.contains(r#"db_pass="s3cret""#));
+        assert!(content.contains(r#"api_key="tok \"en""#));
     }
 }
