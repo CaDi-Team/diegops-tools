@@ -136,6 +136,23 @@ fn vault_list_help_exits_successfully() {
 }
 
 #[test]
+fn cadi_prints_hero_screen() {
+    let output = diegops()
+        .arg("cadi")
+        .output()
+        .expect("failed to run diegops cadi");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("DiegOps"), "got: {stdout}");
+    assert!(
+        stdout.contains("When more than one Diego is needed"),
+        "got: {stdout}"
+    );
+    assert!(stdout.contains("CaDi Labs"), "got: {stdout}");
+}
+
+#[test]
 fn vault_list_diff_help_exits_successfully() {
     let output = diegops()
         .args(["vault", "list-diff", "--help"])

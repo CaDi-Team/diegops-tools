@@ -31,6 +31,8 @@ enum Commands {
         #[command(subcommand)]
         cmd: RepoCommand,
     },
+    /// Show the DiegOps hero screen
+    Cadi,
     /// Manage Vault secrets — pull secrets and write .env files from a config file
     Vault {
         #[command(subcommand)]
@@ -50,6 +52,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Some(Commands::Update) => {
             commands::update::run()?;
+        }
+        Some(Commands::Cadi) => {
+            commands::cadi::run();
         }
         Some(Commands::Repo { cmd }) => {
             let config_path_str;
