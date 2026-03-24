@@ -89,3 +89,58 @@ fn update_help_exits_successfully() {
 
     assert!(output.status.success());
 }
+
+#[test]
+fn vault_help_exits_successfully() {
+    let output = diegops()
+        .args(["vault", "--help"])
+        .output()
+        .expect("failed to run diegops vault --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("apply"), "got: {stdout}");
+    assert!(stdout.contains("list"), "got: {stdout}");
+    assert!(stdout.contains("list-diff"), "got: {stdout}");
+    assert!(stdout.contains("init"), "got: {stdout}");
+}
+
+#[test]
+fn vault_init_help_exits_successfully() {
+    let output = diegops()
+        .args(["vault", "init", "--help"])
+        .output()
+        .expect("failed to run diegops vault init --help");
+
+    assert!(output.status.success());
+}
+
+#[test]
+fn vault_apply_help_exits_successfully() {
+    let output = diegops()
+        .args(["vault", "apply", "--help"])
+        .output()
+        .expect("failed to run diegops vault apply --help");
+
+    assert!(output.status.success());
+}
+
+#[test]
+fn vault_list_help_exits_successfully() {
+    let output = diegops()
+        .args(["vault", "list", "--help"])
+        .output()
+        .expect("failed to run diegops vault list --help");
+
+    assert!(output.status.success());
+}
+
+#[test]
+fn vault_list_diff_help_exits_successfully() {
+    let output = diegops()
+        .args(["vault", "list-diff", "--help"])
+        .output()
+        .expect("failed to run diegops vault list-diff --help");
+
+    assert!(output.status.success());
+}
