@@ -50,6 +50,12 @@ enum Commands {
         #[command(subcommand)]
         cmd: DevtoolsCommand,
     },
+    /// Manage and run ktool (karluiz tools)
+    Ktool {
+        /// Arguments passed to ktool
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -166,6 +172,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             },
         },
+        Some(Commands::Ktool { args }) => {
+            commands::ktool::run(&args)?;
+        }
     }
     Ok(())
 }

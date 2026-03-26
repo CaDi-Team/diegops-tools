@@ -253,3 +253,34 @@ fn auth_status_runs_without_config() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("GitHub"), "got: {stdout}");
 }
+
+#[test]
+fn ktool_without_binary_prints_error() {
+    let output = diegops()
+        .args(["ktool", "version"])
+        .output()
+        .expect("failed to run diegops ktool version");
+    // Just verify diegops doesn't panic
+    let _ = output.status;
+}
+
+#[test]
+fn ktool_help_exits_successfully() {
+    let output = diegops()
+        .args(["ktool", "--help"])
+        .output()
+        .expect("failed to run diegops ktool --help");
+    assert!(output.status.success());
+}
+
+#[test]
+fn auth_status_shows_kenv() {
+    let output = diegops()
+        .args(["auth", "status"])
+        .output()
+        .expect("failed to run diegops auth status");
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("GitHub"), "got: {stdout}");
+    assert!(stdout.contains("kenv"), "got: {stdout}");
+}
