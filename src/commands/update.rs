@@ -82,7 +82,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     println!("Update available: {current} → {latest_tag}");
     eprintln!("Downloading {latest_tag} for {CURRENT_TARGET}...");
 
-    let url = find_asset_url(&release)?;
+    let url = find_asset_url(&release, token.is_some())?;
     let bytes = download(&url, token.as_deref())?;
 
     eprintln!("Extracting...");
@@ -121,7 +121,10 @@ fn fetch_latest(token: Option<&str>) -> Result<serde_json::Value, Box<dyn std::e
     }
 }
 
-fn find_asset_url(release: &serde_json::Value) -> Result<String, Box<dyn std::error::Error>> {
+fn find_asset_url(
+    release: &serde_json::Value,
+    has_token: bool,
+) -> Result<String, Box<dyn std::error::Error>> {
     let assets = release["assets"]
         .as_array()
         .ok_or("GitHub API response missing 'assets'")?;
@@ -136,9 +139,16 @@ fn find_asset_url(release: &serde_json::Value) -> Result<String, Box<dyn std::er
     for asset in assets {
         if let Some(name) = asset["name"].as_str() {
             if name.ends_with(&suffix) {
-                let url = asset["browser_download_url"]
+                // Private repos: use the API URL with Accept: application/octet-stream.
+                // Public repos: use browser_download_url (no auth needed).
+                let url_field = if has_token {
+                    "url"
+                } else {
+                    "browser_download_url"
+                };
+                let url = asset[url_field]
                     .as_str()
-                    .ok_or("asset missing 'browser_download_url'")?;
+                    .ok_or(format!("asset missing '{url_field}'"))?;
                 return Ok(url.to_owned());
             }
         }
@@ -152,6 +162,8 @@ fn download(url: &str, token: Option<&str>) -> Result<Vec<u8>, Box<dyn std::erro
     let mut req = ureq::get(url).set("User-Agent", &ua);
     if let Some(t) = token {
         req = req.set("Authorization", &format!("Bearer {t}"));
+        // API asset URLs require Accept: application/octet-stream to get the binary.
+        req = req.set("Accept", "application/octet-stream");
     }
     let mut buf = Vec::new();
     req.call()?.into_reader().read_to_end(&mut buf)?;
