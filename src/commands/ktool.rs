@@ -258,14 +258,17 @@ fn update() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Forwards arguments to the managed ktool binary, propagating its exit code.
+///
+/// If the child process exits with a non-zero code, `std::process::exit` is
+/// called directly because Rust's `Result` cannot propagate arbitrary exit
+/// codes through `main`.
 fn passthrough(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
-    let path = ktool_bin_path()?;
-    if !path.exists() {
-        eprintln!("ktool is not installed. Run 'diegops ktool update' to download it.");
-        std::process::exit(1);
+    let bin_path = ktool_bin_path()?;
+    if !bin_path.exists() {
+        return Err("ktool not installed. Run 'diegops ktool update' first.".into());
     }
 
-    let status = Command::new(&path)
+    let status = Command::new(&bin_path)
         .args(args)
         .stdin(std::process::Stdio::inherit())
         .stdout(std::process::Stdio::inherit())
@@ -273,8 +276,7 @@ fn passthrough(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         .status()?;
 
     if !status.success() {
-        let code = status.code().unwrap_or(1);
-        std::process::exit(code);
+        std::process::exit(status.code().unwrap_or(2));
     }
 
     Ok(())
