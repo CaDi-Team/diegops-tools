@@ -251,6 +251,17 @@ pub fn gh_logout() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// Reads ktool's kenv token metadata from `~/.ktool/tokens/kenv.json` (read-only).
+fn load_ktool_kenv_token_data() -> Result<Option<TokenData>, Box<dyn std::error::Error>> {
+    let home = super::common::home_dir()?;
+    let path = home.join(".ktool").join("tokens").join("kenv.json");
+    if !path.exists() {
+        return Ok(None);
+    }
+    let content = fs::read_to_string(&path)?;
+    Ok(Some(serde_json::from_str(&content)?))
+}
+
 /// Shows auth status for all providers.
 pub fn status() -> Result<(), Box<dyn std::error::Error>> {
     match load_gh_token_data()? {
@@ -264,6 +275,20 @@ pub fn status() -> Result<(), Box<dyn std::error::Error>> {
             println!("GitHub (gh)    [--] not configured");
         }
     }
+
+    // kenv token (managed by ktool, read-only)
+    match load_ktool_kenv_token_data()? {
+        Some(data) => {
+            println!(
+                "kenv (ktool)   [ok] configured    stored {}    (managed by ktool)",
+                data.stored_at
+            );
+        }
+        None => {
+            println!("kenv (ktool)   [--] not configured");
+        }
+    }
+
     Ok(())
 }
 
