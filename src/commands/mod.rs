@@ -12,5 +12,6 @@ pub mod devtools_gpg;
 pub mod devtools_ssh;
 pub mod ktool;
 pub mod repo;
+pub mod sync;
 pub mod update;
 pub mod vault;
