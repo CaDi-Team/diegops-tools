@@ -223,14 +223,42 @@ fn replace_self(binary: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
     let current_exe = std::env::current_exe()?;
     let tmp = current_exe.with_extension("tmp");
 
-    fs::write(&tmp, binary)?;
+    if let Err(e) = fs::write(&tmp, binary) {
+        if e.kind() == std::io::ErrorKind::PermissionDenied {
+            return Err(format!(
+                "permission denied writing to {}. Try: sudo diegops update",
+                tmp.display()
+            )
+            .into());
+        }
+        return Err(e.into());
+    }
 
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&tmp, fs::Permissions::from_mode(0o755))?;
-        // Atomic on the same filesystem (temp file sits next to the binary).
-        fs::rename(&tmp, &current_exe)?;
+        if let Err(e) = fs::set_permissions(&tmp, fs::Permissions::from_mode(0o755)) {
+            if e.kind() == std::io::ErrorKind::PermissionDenied {
+                let _ = fs::remove_file(&tmp);
+                return Err(format!(
+                    "permission denied updating {}. Try: sudo diegops update",
+                    current_exe.display()
+                )
+                .into());
+            }
+            return Err(e.into());
+        }
+        if let Err(e) = fs::rename(&tmp, &current_exe) {
+            if e.kind() == std::io::ErrorKind::PermissionDenied {
+                let _ = fs::remove_file(&tmp);
+                return Err(format!(
+                    "permission denied replacing {}. Try: sudo diegops update",
+                    current_exe.display()
+                )
+                .into());
+            }
+            return Err(e.into());
+        }
     }
 
     #[cfg(windows)]
