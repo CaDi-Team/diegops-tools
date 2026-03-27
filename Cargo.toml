@@ -22,7 +22,7 @@ serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 humantime = "2"
 base64 = "0.22"
-sha1 = "0.10"
+sha1 = "0.11"
 
 # Unix targets: extract .tar.gz release archives
 [target.'cfg(unix)'.dependencies]
@@ -31,7 +31,7 @@ tar = "0.4"
 
 # Windows target: extract .zip release archives
 [target.'cfg(windows)'.dependencies]
-zip = "2"
+zip = "8"
 
 [profile.release]
 opt-level = "z"      # Minimize binary size
