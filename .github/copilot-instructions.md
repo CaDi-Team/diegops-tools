@@ -18,7 +18,7 @@ It must work equally well for humans typing in a terminal and for automation ins
 - `clap` v4 with derive macros for argument parsing
 - Cargo for builds and tests
 - GitHub Actions for CI (fmt + clippy + test) and releases (tag-triggered cross-platform builds)
-- Self-hosted runner: **all** `runs-on` values must be `cadi-hq-runner-dind-set` — never use `ubuntu-latest`, `macos-latest`, or `windows-latest`
+- Self-hosted runner: **all** `runs-on` values must be `cadi-hq-runner-dind-set-v2` — never use `ubuntu-latest`, `macos-latest`, or `windows-latest`
 - Build tools: native cargo (linux-gnu), cargo-zigbuild/Zig for all other targets (no Docker/cross)
 - Windows target is `x86_64-pc-windows-gnu` — MSVC cross-compilation from Linux is not possible
 - Zig ships musl libc and MinGW, so cargo-zigbuild handles musl, macOS, and Windows GNU targets
