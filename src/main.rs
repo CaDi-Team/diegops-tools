@@ -4,6 +4,7 @@ use clap::{CommandFactory, Parser, Subcommand};
 use commands::auth::{AuthCommand, GhCommand};
 use commands::devtools::{DevtoolsCommand, GitCommand, GpgCommand, SshCommand};
 use commands::repo::RepoCommand;
+use commands::sync::SyncCommand;
 use commands::vault::VaultCommand;
 
 #[derive(Parser)]
@@ -49,6 +50,11 @@ enum Commands {
     Devtools {
         #[command(subcommand)]
         cmd: DevtoolsCommand,
+    },
+    /// Sync config files to GitHub
+    Sync {
+        #[command(subcommand)]
+        cmd: SyncCommand,
     },
     /// Manage and run ktool (karluiz tools)
     Ktool {
@@ -171,6 +177,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     commands::devtools_ssh::create(name.as_deref(), &r#type, email.as_deref())?;
                 }
             },
+        },
+        Some(Commands::Sync { cmd }) => match cmd {
+            SyncCommand::Push => commands::sync::push()?,
+            SyncCommand::Pull => commands::sync::pull()?,
+            SyncCommand::Status => commands::sync::status()?,
         },
         Some(Commands::Ktool { args }) => {
             commands::ktool::run(&args)?;

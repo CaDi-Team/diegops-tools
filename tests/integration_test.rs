@@ -274,6 +274,46 @@ fn ktool_help_exits_successfully() {
 }
 
 #[test]
+fn sync_help_exits_successfully() {
+    let output = diegops()
+        .args(["sync", "--help"])
+        .output()
+        .expect("failed to run diegops sync --help");
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("push"), "got: {stdout}");
+    assert!(stdout.contains("pull"), "got: {stdout}");
+    assert!(stdout.contains("status"), "got: {stdout}");
+}
+
+#[test]
+fn sync_push_help_exits_successfully() {
+    let output = diegops()
+        .args(["sync", "push", "--help"])
+        .output()
+        .expect("failed to run diegops sync push --help");
+    assert!(output.status.success());
+}
+
+#[test]
+fn sync_pull_help_exits_successfully() {
+    let output = diegops()
+        .args(["sync", "pull", "--help"])
+        .output()
+        .expect("failed to run diegops sync pull --help");
+    assert!(output.status.success());
+}
+
+#[test]
+fn sync_status_help_exits_successfully() {
+    let output = diegops()
+        .args(["sync", "status", "--help"])
+        .output()
+        .expect("failed to run diegops sync status --help");
+    assert!(output.status.success());
+}
+
+#[test]
 fn auth_status_shows_kenv() {
     let output = diegops()
         .args(["auth", "status"])

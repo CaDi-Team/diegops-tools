@@ -289,12 +289,14 @@ dependencies = [
 name = "diegops"
 version = "1.0.7"
 dependencies = [
+ "base64",
  "clap",
  "flate2",
  "humantime",
  "serde",
  "serde_json",
  "serde_yaml",
+ "sha1",
  "tar",
  "ureq",
  "zip",
