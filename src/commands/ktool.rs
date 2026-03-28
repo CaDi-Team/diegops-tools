@@ -199,8 +199,23 @@ fn installed_version() -> Option<String> {
     let trimmed = stdout.trim();
     // Extract the version number from output like "ktool 0.2.4" or "ktool v0.2.4"
     // Return just the version part (last word), stripped of any "v" prefix.
-    let version = trimmed.split_whitespace().last().unwrap_or(trimmed);
-    Some(version.trim_start_matches('v').to_owned())
+    Some(extract_version_from_output(trimmed))
+}
+
+/// Extracts the version number from version command output.
+///
+/// Takes the last whitespace-delimited word and strips any leading `v` prefix.
+/// For example: `"ktool 0.2.4"` -> `"0.2.4"`, `"ktool v0.2.4"` -> `"0.2.4"`.
+fn extract_version_from_output(output: &str) -> String {
+    let version = output.split_whitespace().last().unwrap_or(output);
+    version.trim_start_matches('v').to_owned()
+}
+
+/// Normalizes a version string by stripping a leading `v` prefix.
+///
+/// Used to compare version tags like `"v0.2.4"` with bare versions like `"0.2.4"`.
+fn normalize_version(version: &str) -> &str {
+    version.trim_start_matches('v')
 }
 
 // ---------------------------------------------------------------------------
@@ -244,8 +259,8 @@ fn update() -> Result<(), Box<dyn std::error::Error>> {
 
     if let Some(current) = installed_version() {
         // Normalize: strip "v" prefix for comparison (tag is "v0.2.4", version may be "0.2.4")
-        let current_ver = current.trim_start_matches('v');
-        let latest_ver = latest_tag.trim_start_matches('v');
+        let current_ver = normalize_version(&current);
+        let latest_ver = normalize_version(latest_tag);
         if current_ver == latest_ver {
             println!("ktool is up to date ({latest_tag}).");
             return Ok(());
@@ -292,4 +307,48 @@ fn passthrough(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extract_version_from_output_bare() {
+        assert_eq!(extract_version_from_output("ktool 0.2.4"), "0.2.4");
+    }
+
+    #[test]
+    fn extract_version_from_output_with_v_prefix() {
+        assert_eq!(extract_version_from_output("ktool v0.2.4"), "0.2.4");
+    }
+
+    #[test]
+    fn extract_version_from_output_version_only() {
+        assert_eq!(extract_version_from_output("v0.2.4"), "0.2.4");
+    }
+
+    #[test]
+    fn extract_version_from_output_bare_version_only() {
+        assert_eq!(extract_version_from_output("0.2.4"), "0.2.4");
+    }
+
+    #[test]
+    fn normalize_version_strips_v() {
+        assert_eq!(normalize_version("v0.2.4"), "0.2.4");
+        assert_eq!(normalize_version("0.2.4"), "0.2.4");
+    }
+
+    #[test]
+    fn normalize_version_equality() {
+        assert_eq!(normalize_version("v0.2.4"), normalize_version("0.2.4"));
+    }
+
+    #[test]
+    fn current_target_is_not_empty() {
+        assert!(
+            !CURRENT_TARGET.is_empty(),
+            "CURRENT_TARGET must not be empty"
+        );
+    }
 }

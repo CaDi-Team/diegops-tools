@@ -275,3 +275,88 @@ fn replace_self(binary: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn current_target_is_not_empty() {
+        assert!(
+            !CURRENT_TARGET.is_empty(),
+            "CURRENT_TARGET must not be empty"
+        );
+    }
+
+    #[test]
+    fn find_asset_url_finds_matching_asset() {
+        let suffix = if cfg!(windows) {
+            format!("{CURRENT_TARGET}.zip")
+        } else {
+            format!("{CURRENT_TARGET}.tar.gz")
+        };
+        let release = serde_json::json!({
+            "assets": [
+                {
+                    "name": format!("diegops-v1.0.0-{suffix}"),
+                    "url": "https://api.github.com/repos/CaDi-Team/diegops-tools/releases/assets/123",
+                    "browser_download_url": format!("https://github.com/CaDi-Team/diegops-tools/releases/download/v1.0.0/diegops-v1.0.0-{suffix}")
+                }
+            ]
+        });
+
+        let url = find_asset_url(&release, false).expect("should find asset");
+        assert!(
+            url.starts_with("https://github.com/"),
+            "expected browser_download_url, got: {url}"
+        );
+    }
+
+    #[test]
+    fn find_asset_url_returns_error_when_no_match() {
+        let release = serde_json::json!({
+            "assets": [
+                {
+                    "name": "diegops-v1.0.0-some-other-target.tar.gz",
+                    "url": "https://api.example.com/asset/1",
+                    "browser_download_url": "https://example.com/download/1"
+                }
+            ]
+        });
+
+        let result = find_asset_url(&release, false);
+        assert!(result.is_err(), "should error when no matching asset");
+    }
+
+    #[test]
+    fn find_asset_url_uses_url_when_has_token() {
+        let suffix = if cfg!(windows) {
+            format!("{CURRENT_TARGET}.zip")
+        } else {
+            format!("{CURRENT_TARGET}.tar.gz")
+        };
+        let release = serde_json::json!({
+            "assets": [
+                {
+                    "name": format!("diegops-v1.0.0-{suffix}"),
+                    "url": "https://api.github.com/asset/private",
+                    "browser_download_url": "https://github.com/download/public"
+                }
+            ]
+        });
+
+        let with_token = find_asset_url(&release, true).expect("should find asset with token");
+        assert_eq!(with_token, "https://api.github.com/asset/private");
+
+        let without_token =
+            find_asset_url(&release, false).expect("should find asset without token");
+        assert_eq!(without_token, "https://github.com/download/public");
+    }
+
+    #[test]
+    fn find_asset_url_errors_on_missing_assets_array() {
+        let release = serde_json::json!({});
+        let result = find_asset_url(&release, false);
+        assert!(result.is_err());
+    }
+}
