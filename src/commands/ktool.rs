@@ -197,13 +197,10 @@ fn installed_version() -> Option<String> {
     let stdout = String::from_utf8_lossy(&output.stdout);
     // Extract version tag (e.g. "ktool v1.2.3" -> "v1.2.3", or just "v1.2.3")
     let trimmed = stdout.trim();
-    for word in trimmed.split_whitespace() {
-        if word.starts_with('v') {
-            return Some(word.to_owned());
-        }
-    }
-    // Fallback: return the whole trimmed output
-    Some(trimmed.to_owned())
+    // Extract the version number from output like "ktool 0.2.4" or "ktool v0.2.4"
+    // Return just the version part (last word), stripped of any "v" prefix.
+    let version = trimmed.split_whitespace().last().unwrap_or(trimmed);
+    Some(version.trim_start_matches('v').to_owned())
 }
 
 // ---------------------------------------------------------------------------
@@ -246,11 +243,14 @@ fn update() -> Result<(), Box<dyn std::error::Error>> {
         .ok_or("GitHub API response missing 'tag_name'")?;
 
     if let Some(current) = installed_version() {
-        if current == latest_tag {
-            println!("ktool already up to date ({current}).");
+        // Normalize: strip "v" prefix for comparison (tag is "v0.2.4", version may be "0.2.4")
+        let current_ver = current.trim_start_matches('v');
+        let latest_ver = latest_tag.trim_start_matches('v');
+        if current_ver == latest_ver {
+            println!("ktool is up to date ({latest_tag}).");
             return Ok(());
         }
-        println!("ktool update available: {current} -> {latest_tag}");
+        println!("ktool update available: v{current_ver} -> {latest_tag}");
     } else {
         println!("Installing ktool {latest_tag}...");
     }
