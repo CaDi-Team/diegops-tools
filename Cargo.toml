@@ -3,7 +3,7 @@ name = "diegops"
 version = "1.0.10"
 edition = "2021"
 description = "diegops — personal productivity CLI for humans and containers"
-license = "UNLICENSED"
+license = "MIT"
 repository = "https://github.com/CaDi-Team/diegops-tools"
 
 [[bin]]
