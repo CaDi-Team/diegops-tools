@@ -1,6 +1,6 @@
 [package]
 name = "diegops"
-version = "1.0.8"
+version = "1.0.9"
 edition = "2021"
 description = "diegops — personal productivity CLI for humans and containers"
 license = "UNLICENSED"

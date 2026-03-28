@@ -243,16 +243,16 @@ Triggers on every push and PR to `develop`:
 2. `cargo clippy -- -D warnings` — lint gate
 3. `cargo test` — test gate
 
-Runner: `cadi-hq-runner-dind-set` (self-hosted Linux dind).
+Runner: `[cadi-hq-runner-dind-set-v2, cadi-hq-runner-dind-set]` (self-hosted Linux dind).
 
 ### Release (`cd.yml`)
 Triggers on tag push matching `v[0-9]+.[0-9]+.[0-9]+`:
-1. Builds all 6 targets in a matrix — all jobs on `cadi-hq-runner-dind-set`.
+1. Builds all 6 targets in a matrix — all jobs on `[cadi-hq-runner-dind-set-v2, cadi-hq-runner-dind-set]`.
 2. Cross-compilation via `cargo-zigbuild` (Zig as linker — no Docker, no `cross`).
 3. Archives: `.tar.gz` for Unix targets (bash + `tar`), `.zip` for Windows (bash + `zip`).
 4. Creates a GitHub Release with all archives as assets.
 
-Runner: `cadi-hq-runner-dind-set` (self-hosted Linux dind) for all jobs.
+Runner: `[cadi-hq-runner-dind-set-v2, cadi-hq-runner-dind-set]` (self-hosted Linux dind) for all jobs.
 **Do not** add `ubuntu-latest`, `macos-latest`, or `windows-latest` as runner values — use the self-hosted tag exclusively.
 
 Build tools per target:
