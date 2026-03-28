@@ -13,9 +13,16 @@ use commands::vault::VaultCommand;
     name = "diegops",
     version,
     about = "diegops — personal productivity CLI for humans and containers",
-    long_about = None,
-    // Disable the auto-generated help subcommand so we can define our own
-    disable_help_subcommand = true,
+    long_about = "diegops — personal productivity CLI for humans and containers\n\n\
+        Workspace management, secret injection, cloud config sync,\n\
+        managed DevOps toolbox, and developer workstation setup\n\
+        in a single static binary.",
+    after_long_help = "TOOL PASSTHROUGH:\n  \
+        Run managed tools directly: diegops <tool> <args>\n  \
+        Example: diegops gh pr list, diegops jq '.name' file.json\n  \
+        Available: gh, vault, terraform, helm, k9s, kubectl, jq, yq, trivy, trip\n\n\
+        Run 'diegops <command> --help' for details on any command.",
+    disable_help_subcommand = true
 )]
 struct Cli {
     #[command(subcommand)]
@@ -29,46 +36,112 @@ enum Commands {
     /// Show help and available commands
     Help,
     /// Update diegops to the latest released version
+    #[command(long_about = "Update diegops to the latest released version.\n\n\
+        Downloads the latest release from GitHub, replaces the current binary\n\
+        in place. Idempotent — skips if already up to date.\n\n\
+        If installed in a system path, you may need: sudo diegops update")]
     Update,
-    /// Manage repository workspace — clone, list, and diff repos from a config file
+    /// Manage git repository workspace
+    #[command(
+        long_about = "Manage git repository workspace — clone, list, and diff repos.\n\n\
+        Config: ~/.diegops/repos.yaml (override with --config or $DIEGOPS_REPOS_CONFIG)\n\n\
+        Quick start:\n  \
+        diegops repo init       # create sample config\n  \
+        diegops repo apply      # clone all missing repos\n  \
+        diegops repo list-diff  # see what's missing"
+    )]
     Repo {
         #[command(subcommand)]
         cmd: RepoCommand,
     },
     /// Show the DiegOps hero screen
     Cadi,
-    /// Manage Vault secrets — pull secrets and write .env files from a config file
+    /// Manage Vault secrets — pull secrets and write .env files
+    #[command(
+        long_about = "Manage Vault secrets — pull secrets and write .env files.\n\n\
+        Config: ~/.diegops/repo-vault.yaml (override with --config or $DIEGOPS_VAULT_CONFIG)\n\
+        Requires: vault CLI on PATH, VAULT_ADDR set, authenticated session.\n\n\
+        Quick start:\n  \
+        diegops vault init    # create sample config\n  \
+        diegops vault apply   # pull secrets and write .env files"
+    )]
     Vault {
         #[command(subcommand)]
         cmd: VaultCommand,
     },
-    /// Manage authentication tokens for external services
+    /// Manage authentication tokens (GitHub, kenv)
+    #[command(long_about = "Manage authentication tokens for external services.\n\n\
+        Storage: ~/.diegops/tokens/ (0600 permissions on Unix)\n\
+        Resolution: stored file > $GITHUB_TOKEN env var > unauthenticated\n\n\
+        Quick start:\n  \
+        diegops auth gh login <PAT>   # store GitHub token\n  \
+        diegops auth status           # check all providers")]
     Auth {
         #[command(subcommand)]
         cmd: AuthCommand,
     },
-    /// Developer tools — GPG, SSH, and git identity setup
+    /// Developer workstation setup (git, gpg, ssh)
+    #[command(
+        long_about = "Developer workstation setup — git identity, GPG signing, SSH keys.\n\n\
+        Identity resolution: --name/--email flags > git config > GitHub API (gh)\n\n\
+        Quick start:\n  \
+        diegops devtools git set              # set git identity\n  \
+        diegops devtools gpg set              # full GPG setup\n  \
+        diegops devtools ssh create --name github --type ed25519"
+    )]
     Devtools {
         #[command(subcommand)]
         cmd: DevtoolsCommand,
     },
-    /// Sync config files to GitHub
+    /// Cloud-sync config files to a private GitHub repo
+    #[command(
+        long_about = "Cloud-sync ~/.diegops/ config files to a private GitHub repo.\n\n\
+        Auto-creates repo: diegops-{username}-memory (private)\n\
+        Syncs everything except tokens/ and bin/\n\
+        Requires: diegops auth gh login first\n\n\
+        Usage:\n  \
+        diegops sync push     # upload local configs to GitHub\n  \
+        diegops sync pull     # download configs from GitHub\n  \
+        diegops sync status   # show diff between local and cloud"
+    )]
     Sync {
         #[command(subcommand)]
         cmd: SyncCommand,
     },
-    /// Manage DevOps CLI tools (gh, vault, terraform, helm, k9s, jq, yq, trivy, trippy, kubectl)
+    /// Manage DevOps CLI tools — install, update, remove
+    #[command(
+        long_about = "Manage DevOps CLI tools — install, update, and remove.\n\n\
+        All binaries stored in ~/.diegops/bin/\n\
+        Available: gh, vault, terraform, helm, k9s, kubectl, jq, yq, trivy, trippy\n\n\
+        Usage:\n  \
+        diegops tool list              # show available tools\n  \
+        diegops tool install <name>    # install a tool\n  \
+        diegops tool update            # update all installed tools\n  \
+        diegops tool remove <name>     # remove a tool\n\n\
+        Then use directly: diegops <tool> <args>\n  \
+        Example: diegops gh pr list, diegops jq '.name' file.json"
+    )]
     Tool {
         #[command(subcommand)]
         cmd: ToolCommand,
     },
     /// Manage and run ktool (karluiz tools)
+    #[command(
+        long_about = "Manage and run ktool (karluiz tools) as a sidecar binary.\n\n\
+        Usage:\n  \
+        diegops ktool update              # install/update ktool\n  \
+        diegops ktool <args>              # forward to ktool\n\n\
+        Examples:\n  \
+        diegops ktool kenv list           # list kenv secrets\n  \
+        diegops ktool auth kenv login T   # authenticate with kenv\n  \
+        diegops ktool magic               # karluiz hero screen"
+    )]
     Ktool {
         /// Arguments passed to ktool
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
-    /// Run a managed tool directly (gh, vault, terraform, helm, k9s, jq, yq, trivy, trip, kubectl)
+    /// Run a managed tool directly (gh, vault, terraform, helm, k9s, kubectl, jq, yq, trivy, trip)
     #[command(external_subcommand)]
     External(Vec<String>),
 }
