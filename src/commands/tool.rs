@@ -971,4 +971,96 @@ mod tests {
         assert!(is_known_tool("trip")); // binary name of trippy
         assert!(!is_known_tool("nonexistent"));
     }
+
+    #[test]
+    fn asset_name_terraform() {
+        let tool = find_tool("terraform").unwrap();
+        let name = asset_name(tool, "v1.9.0");
+        assert!(
+            name.starts_with("terraform_1.9.0_"),
+            "unexpected asset name: {name}"
+        );
+        assert!(name.ends_with(".zip"), "unexpected asset name: {name}");
+    }
+
+    #[test]
+    fn asset_name_k9s_no_version() {
+        let tool = find_tool("k9s").unwrap();
+        let name = asset_name(tool, "v0.32.5");
+        // k9s does not include version in filename
+        assert!(
+            !name.contains("0.32.5"),
+            "k9s asset should NOT contain version: {name}"
+        );
+        assert!(name.starts_with("k9s_"), "unexpected asset name: {name}");
+        assert!(name.ends_with(".tar.gz"), "unexpected asset name: {name}");
+    }
+
+    #[test]
+    fn asset_name_yq() {
+        let tool = find_tool("yq").unwrap();
+        let name = asset_name(tool, "v4.44.0");
+        let os = platform_os();
+        let arch = platform_arch();
+        assert_eq!(name, format!("yq_{os}_{arch}.tar.gz"));
+    }
+
+    #[test]
+    fn asset_name_trivy_capitalization() {
+        let tool = find_tool("trivy").unwrap();
+        let name = asset_name(tool, "v0.52.0");
+        assert!(
+            name.starts_with("trivy_0.52.0_"),
+            "unexpected asset name: {name}"
+        );
+        // Verify OS/arch capitalization
+        if cfg!(target_os = "macos") {
+            assert!(name.contains("macOS"), "expected 'macOS' in: {name}");
+            if cfg!(target_arch = "aarch64") {
+                assert!(name.contains("ARM64"), "expected 'ARM64' in: {name}");
+            } else {
+                assert!(name.contains("64bit"), "expected '64bit' in: {name}");
+            }
+        } else if cfg!(target_os = "linux") {
+            assert!(name.contains("Linux"), "expected 'Linux' in: {name}");
+        }
+    }
+
+    #[test]
+    fn asset_name_kubectl_is_bare() {
+        let tool = find_tool("kubectl").unwrap();
+        let name = asset_name(tool, "v1.30.0");
+        assert_eq!(name, "kubectl");
+    }
+
+    #[test]
+    fn extract_semver_gh_version_output() {
+        assert_eq!(
+            extract_semver("gh version 2.50.0 (2024-06-01)"),
+            Some("2.50.0".into())
+        );
+    }
+
+    #[test]
+    fn extract_semver_terraform_output() {
+        assert_eq!(extract_semver("Terraform v1.9.0"), Some("1.9.0".into()));
+    }
+
+    #[test]
+    fn extract_semver_vault_output() {
+        assert_eq!(extract_semver("vault v1.17.0"), Some("1.17.0".into()));
+    }
+
+    #[test]
+    fn extract_semver_bare_tag() {
+        assert_eq!(extract_semver("v0.32.0"), Some("0.32.0".into()));
+    }
+
+    #[test]
+    fn extract_semver_kubectl_output() {
+        assert_eq!(
+            extract_semver("Client Version: v1.30.0"),
+            Some("1.30.0".into())
+        );
+    }
 }

@@ -618,4 +618,48 @@ mod tests {
 
         let _ = fs::remove_dir_all(&dir);
     }
+
+    #[test]
+    fn scan_local_files_empty_directory() {
+        let dir =
+            std::env::temp_dir().join(format!("diegops-test-sync-empty-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let files = scan_local_files(&dir).unwrap();
+        assert!(files.is_empty(), "empty dir should yield no files");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn scan_local_files_nonexistent_directory() {
+        let dir =
+            std::env::temp_dir().join(format!("diegops-test-sync-noexist-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+
+        let files = scan_local_files(&dir).unwrap();
+        assert!(files.is_empty(), "nonexistent dir should yield no files");
+    }
+
+    #[test]
+    fn github_blob_sha_binary_content() {
+        // Non-UTF8 binary content
+        let content: Vec<u8> = vec![0x00, 0xFF, 0xFE, 0x80, 0x01];
+        let sha = github_blob_sha(&content);
+        // Should produce a valid 40-char hex SHA
+        assert_eq!(sha.len(), 40, "SHA should be 40 hex chars");
+        assert!(
+            sha.chars().all(|c| c.is_ascii_hexdigit()),
+            "SHA should be hex: {sha}"
+        );
+    }
+
+    #[test]
+    fn repo_name_special_characters() {
+        assert_eq!(repo_name("user-name"), "diegops-user-name-memory");
+        assert_eq!(repo_name("user_name"), "diegops-user_name-memory");
+        assert_eq!(repo_name("user123"), "diegops-user123-memory");
+        assert_eq!(repo_name("CamelCase"), "diegops-CamelCase-memory");
+    }
 }

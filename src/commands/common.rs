@@ -91,3 +91,84 @@ pub fn read_config_file(path: &Path) -> Result<String, Box<dyn std::error::Error
         }
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn home_dir_returns_non_empty_path() {
+        let home = home_dir().expect("home_dir should succeed");
+        assert!(!home.as_os_str().is_empty(), "home_dir must not be empty");
+    }
+
+    #[test]
+    fn diegops_dir_ends_with_diegops() {
+        let dir = diegops_dir().expect("diegops_dir should succeed");
+        assert!(
+            dir.ends_with(".diegops"),
+            "diegops_dir should end with .diegops, got: {}",
+            dir.display()
+        );
+    }
+
+    #[test]
+    fn expand_home_with_home_prefix() {
+        let home = home_dir().expect("home_dir should succeed");
+        let expanded = expand_home("$HOME/test");
+        assert_eq!(expanded, home.join("test"));
+    }
+
+    #[test]
+    fn expand_home_with_leading_slash() {
+        let home = home_dir().expect("home_dir should succeed");
+        let expanded = expand_home("/$HOME/test");
+        assert_eq!(expanded, home.join("test"));
+    }
+
+    #[test]
+    fn expand_home_absolute_path_unchanged() {
+        let expanded = expand_home("/absolute/path");
+        assert_eq!(expanded, PathBuf::from("/absolute/path"));
+    }
+
+    #[test]
+    fn expand_home_bare_home() {
+        let home = home_dir().expect("home_dir should succeed");
+        let expanded = expand_home("$HOME");
+        assert_eq!(expanded, home);
+    }
+
+    #[test]
+    fn resolve_config_path_cli_flag_takes_precedence() {
+        let cli = PathBuf::from("/custom/config.yaml");
+        let result = resolve_config_path(
+            Some(cli.as_path()),
+            "NONEXISTENT_ENV_VAR_12345",
+            "default.yaml",
+        )
+        .expect("should succeed");
+        assert_eq!(result, cli);
+    }
+
+    #[test]
+    fn resolve_config_path_falls_back_to_default() {
+        // Use an env var name that definitely does not exist
+        let result =
+            resolve_config_path(None, "DIEGOPS_TEST_NONEXISTENT_ENV_VAR_98765", "repos.yaml")
+                .expect("should succeed");
+        let expected = diegops_dir()
+            .expect("diegops_dir should succeed")
+            .join("repos.yaml");
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn resolve_config_path_env_var_overrides_default() {
+        let key = "DIEGOPS_TEST_RESOLVE_CONFIG_12345";
+        std::env::set_var(key, "/from/env.yaml");
+        let result = resolve_config_path(None, key, "default.yaml").expect("should succeed");
+        std::env::remove_var(key);
+        assert_eq!(result, PathBuf::from("/from/env.yaml"));
+    }
+}
