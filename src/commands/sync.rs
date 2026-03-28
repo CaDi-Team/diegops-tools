@@ -11,11 +11,21 @@ use std::path::Path;
 /// Sync sub-commands.
 #[derive(clap::Subcommand)]
 pub enum SyncCommand {
-    /// Upload local config files to GitHub
+    /// Upload local config files to GitHub (creates repo on first use)
+    #[command(long_about = "Upload ~/.diegops/ config files to GitHub.\n\n\
+        On first push, creates a private repo: diegops-{username}-memory\n\
+        Excludes tokens/ and bin/ directories.\n\
+        Skips unchanged files (content-aware).")]
     Push,
     /// Download config files from GitHub to local ~/.diegops/
+    #[command(long_about = "Download config files from GitHub to ~/.diegops/\n\n\
+        Overwrites local files with cloud versions.\n\
+        Skips unchanged files. Creates directories as needed.\n\
+        Requires: run 'diegops sync push' first to create the repo.")]
     Pull,
     /// Show diff between local and cloud config files
+    #[command(long_about = "Show diff between local and cloud config files.\n\n\
+        Legend: = in sync, ~ differs, + local only, - cloud only")]
     Status,
 }
 

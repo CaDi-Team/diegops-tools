@@ -16,20 +16,40 @@ use std::process::Command;
 #[derive(clap::Subcommand)]
 pub enum ToolCommand {
     /// List all available tools and their install status
+    #[command(long_about = "List all available tools and their install status.\n\n\
+        Shows: tool name, description, installed version, and status.\n\
+        Available tools: gh, vault, terraform, helm, k9s, kubectl, jq, yq, trivy, trippy")]
     List,
-    /// Install a tool (latest version)
+    /// Install a tool (downloads latest version)
+    #[command(long_about = "Install a tool by downloading the latest version.\n\n\
+        Binaries are stored in ~/.diegops/bin/\n\
+        Idempotent — skips if already at the latest version.\n\n\
+        Available tools: gh, vault, terraform, helm, k9s, kubectl, jq, yq, trivy, trippy\n\n\
+        Examples:\n  \
+        diegops tool install gh         # install GitHub CLI\n  \
+        diegops tool install jq         # install jq\n  \
+        diegops tool install kubectl    # install kubectl\n\n\
+        After installing, use directly: diegops gh pr list")]
     Install {
-        /// Tool name (e.g., gh, vault, terraform)
+        /// Tool name (e.g., gh, vault, terraform, jq, kubectl)
         name: String,
     },
-    /// Update installed tools
+    /// Update installed tools (all or specific)
+    #[command(long_about = "Update installed tools to their latest versions.\n\n\
+        With no arguments, updates ALL installed tools.\n\
+        With a tool name, updates only that tool.\n\n\
+        Examples:\n  \
+        diegops tool update        # update everything\n  \
+        diegops tool update gh     # update only gh")]
     Update {
         /// Tool name (omit to update all installed tools)
         name: Option<String>,
     },
     /// Remove an installed tool
+    #[command(long_about = "Remove an installed tool from ~/.diegops/bin/\n\n\
+        Example: diegops tool remove gh")]
     Remove {
-        /// Tool name
+        /// Tool name (e.g., gh, vault, terraform)
         name: String,
     },
 }
