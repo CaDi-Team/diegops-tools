@@ -5,6 +5,7 @@ use commands::auth::{AuthCommand, GhCommand};
 use commands::devtools::{DevtoolsCommand, GitCommand, GpgCommand, SshCommand};
 use commands::repo::RepoCommand;
 use commands::sync::SyncCommand;
+use commands::tool::ToolCommand;
 use commands::vault::VaultCommand;
 
 #[derive(Parser)]
@@ -56,12 +57,20 @@ enum Commands {
         #[command(subcommand)]
         cmd: SyncCommand,
     },
+    /// Manage DevOps CLI tools (gh, vault, terraform, helm, k9s, jq, yq, trivy, trippy, kubectl)
+    Tool {
+        #[command(subcommand)]
+        cmd: ToolCommand,
+    },
     /// Manage and run ktool (karluiz tools)
     Ktool {
         /// Arguments passed to ktool
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
+    /// Run a managed tool directly (gh, vault, terraform, helm, k9s, jq, yq, trivy, trip, kubectl)
+    #[command(external_subcommand)]
+    External(Vec<String>),
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -183,8 +192,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             SyncCommand::Pull => commands::sync::pull()?,
             SyncCommand::Status => commands::sync::status()?,
         },
+        Some(Commands::Tool { cmd }) => match cmd {
+            ToolCommand::List => commands::tool::list()?,
+            ToolCommand::Install { name } => commands::tool::install(&name)?,
+            ToolCommand::Update { name } => commands::tool::update(name.as_deref())?,
+            ToolCommand::Remove { name } => commands::tool::remove(&name)?,
+        },
         Some(Commands::Ktool { args }) => {
             commands::ktool::run(&args)?;
+        }
+        Some(Commands::External(args)) => {
+            if let Some(name) = args.first() {
+                if commands::tool::is_known_tool(name) {
+                    commands::tool::passthrough(name, &args[1..])?;
+                } else {
+                    eprintln!("Unknown command: {name}");
+                    eprintln!("Run 'diegops help' for available commands.");
+                    std::process::exit(1);
+                }
+            }
         }
     }
     Ok(())

@@ -314,6 +314,43 @@ fn sync_status_help_exits_successfully() {
 }
 
 #[test]
+fn tool_list_exits_successfully() {
+    let output = diegops()
+        .args(["tool", "list"])
+        .output()
+        .expect("failed to run diegops tool list");
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("gh"), "got: {stdout}");
+    assert!(stdout.contains("vault"), "got: {stdout}");
+    assert!(stdout.contains("terraform"), "got: {stdout}");
+    assert!(stdout.contains("kubectl"), "got: {stdout}");
+}
+
+#[test]
+fn tool_help_exits_successfully() {
+    let output = diegops()
+        .args(["tool", "--help"])
+        .output()
+        .expect("failed to run diegops tool --help");
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("list"), "got: {stdout}");
+    assert!(stdout.contains("install"), "got: {stdout}");
+    assert!(stdout.contains("update"), "got: {stdout}");
+    assert!(stdout.contains("remove"), "got: {stdout}");
+}
+
+#[test]
+fn unknown_tool_passthrough_shows_error() {
+    let output = diegops()
+        .args(["nonexistent-tool-xyz"])
+        .output()
+        .expect("failed to run diegops");
+    assert!(!output.status.success());
+}
+
+#[test]
 fn auth_status_shows_kenv() {
     let output = diegops()
         .args(["auth", "status"])
