@@ -121,7 +121,7 @@ Never manually edit workflow version strings; the tag drives everything.
 
 ## Runner
 
-All `runs-on` values must be `cadi-hq-runner-dind-set` (self-hosted Linux dind).
+All `runs-on` values must be `[cadi-hq-runner-dind-set-v2, cadi-hq-runner-dind-set]` (self-hosted Linux dind).
 Never use `ubuntu-latest`, `macos-latest`, or `windows-latest`.
 
 Build tool per target:
