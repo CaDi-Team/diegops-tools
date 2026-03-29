@@ -464,6 +464,23 @@ fn fetch_latest_version(
 
 /// Builds the download URL for a tool at a given version.
 fn download_url(tool: &ToolDef, version: &str) -> String {
+    let v = version.trim_start_matches('v');
+    let os = platform_os();
+    let arch = platform_arch();
+
+    // HashiCorp tools use their own CDN (no assets on GitHub releases).
+    match tool.name {
+        "vault" => {
+            return format!("https://releases.hashicorp.com/vault/{v}/vault_{v}_{os}_{arch}.zip");
+        }
+        "terraform" => {
+            return format!(
+                "https://releases.hashicorp.com/terraform/{v}/terraform_{v}_{os}_{arch}.zip"
+            );
+        }
+        _ => {}
+    }
+
     match &tool.source {
         ToolSource::GitHub { repo } => {
             let asset = asset_name(tool, version);
@@ -472,14 +489,10 @@ fn download_url(tool: &ToolDef, version: &str) -> String {
         ToolSource::Url {
             latest_url: _,
             download_template,
-        } => {
-            let os = platform_os();
-            let arch = platform_arch();
-            download_template
-                .replace("{version}", version)
-                .replace("{os}", os)
-                .replace("{arch}", arch)
-        }
+        } => download_template
+            .replace("{version}", version)
+            .replace("{os}", os)
+            .replace("{arch}", arch),
     }
 }
 
@@ -944,6 +957,28 @@ mod tests {
             url.starts_with("https://github.com/cli/cli/releases/download/v2.50.0/"),
             "unexpected URL: {url}"
         );
+    }
+
+    #[test]
+    fn download_url_vault() {
+        let tool = find_tool("vault").unwrap();
+        let url = download_url(tool, "v1.21.4");
+        assert!(
+            url.starts_with("https://releases.hashicorp.com/vault/1.21.4/vault_1.21.4_"),
+            "unexpected URL: {url}"
+        );
+        assert!(url.ends_with(".zip"), "unexpected URL: {url}");
+    }
+
+    #[test]
+    fn download_url_terraform() {
+        let tool = find_tool("terraform").unwrap();
+        let url = download_url(tool, "v1.14.8");
+        assert!(
+            url.starts_with("https://releases.hashicorp.com/terraform/1.14.8/terraform_1.14.8_"),
+            "unexpected URL: {url}"
+        );
+        assert!(url.ends_with(".zip"), "unexpected URL: {url}");
     }
 
     #[test]
