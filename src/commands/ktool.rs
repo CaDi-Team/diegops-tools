@@ -61,33 +61,18 @@ fn ktool_bin_path() -> Result<PathBuf, Box<dyn std::error::Error>> {
 }
 
 /// Fetches the latest release metadata from the GitHub API.
-fn fetch_latest(token: Option<&str>) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+fn fetch_latest() -> Result<serde_json::Value, Box<dyn std::error::Error>> {
     let ua = format!("diegops/{}", env!("CARGO_PKG_VERSION"));
-    let mut req = ureq::get(RELEASES_API)
+    let resp = ureq::get(RELEASES_API)
         .set("User-Agent", &ua)
-        .set("Accept", "application/vnd.github.v3+json");
-    if let Some(t) = token {
-        req = req.set("Authorization", &format!("Bearer {t}"));
-    }
-    let response = req.call();
-
-    match response {
-        Ok(resp) => Ok(resp.into_json()?),
-        Err(ureq::Error::Status(404, _)) if token.is_none() => Err(
-            "GitHub API returned 404. If this is a private repo, run 'diegops auth gh login <PAT>' first".into(),
-        ),
-        Err(ureq::Error::Status(401 | 403, _)) => Err(
-            "stored GitHub token is no longer valid. Run 'diegops auth gh login <PAT>' to update it"
-                .into(),
-        ),
-        Err(e) => Err(e.into()),
-    }
+        .set("Accept", "application/vnd.github.v3+json")
+        .call()?;
+    Ok(resp.into_json()?)
 }
 
 /// Finds the download URL for the ktool asset matching the current target.
 fn find_asset_url(
     release: &serde_json::Value,
-    has_token: bool,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let assets = release["assets"]
         .as_array()
@@ -102,16 +87,9 @@ fn find_asset_url(
     for asset in assets {
         if let Some(name) = asset["name"].as_str() {
             if name.ends_with(&suffix) {
-                // Private repos: use the API URL with Accept: application/octet-stream.
-                // Public repos: use browser_download_url (no auth needed).
-                let url_field = if has_token {
-                    "url"
-                } else {
-                    "browser_download_url"
-                };
-                let url = asset[url_field]
+                let url = asset["browser_download_url"]
                     .as_str()
-                    .ok_or(format!("asset missing '{url_field}'"))?;
+                    .ok_or("asset missing 'browser_download_url'")?;
                 return Ok(url.to_owned());
             }
         }
@@ -121,16 +99,14 @@ fn find_asset_url(
 }
 
 /// Downloads a URL and returns the raw bytes.
-fn download(url: &str, token: Option<&str>) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+fn download(url: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let ua = format!("diegops/{}", env!("CARGO_PKG_VERSION"));
-    let mut req = ureq::get(url).set("User-Agent", &ua);
-    if let Some(t) = token {
-        req = req.set("Authorization", &format!("Bearer {t}"));
-        // API asset URLs require Accept: application/octet-stream to get the binary.
-        req = req.set("Accept", "application/octet-stream");
-    }
     let mut buf = Vec::new();
-    req.call()?.into_reader().read_to_end(&mut buf)?;
+    ureq::get(url)
+        .set("User-Agent", &ua)
+        .call()?
+        .into_reader()
+        .read_to_end(&mut buf)?;
     Ok(buf)
 }
 
@@ -250,8 +226,7 @@ pub fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
 fn update() -> Result<(), Box<dyn std::error::Error>> {
     eprintln!("Checking for ktool updates...");
 
-    let token = super::auth::load_gh_token().ok().flatten();
-    let release = fetch_latest(token.as_deref())?;
+    let release = fetch_latest()?;
 
     let latest_tag = release["tag_name"]
         .as_str()
@@ -271,8 +246,8 @@ fn update() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     eprintln!("Downloading ktool {latest_tag} for {CURRENT_TARGET}...");
-    let url = find_asset_url(&release, token.is_some())?;
-    let bytes = download(&url, token.as_deref())?;
+    let url = find_asset_url(&release)?;
+    let bytes = download(&url)?;
 
     eprintln!("Extracting...");
     let binary = extract_binary(&bytes)?;
