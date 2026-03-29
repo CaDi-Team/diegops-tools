@@ -15,7 +15,7 @@
 ### Stack
 - Rust stable, clap v4 (derive), Cargo
 - GitHub Actions: CI on every push, releases on `vx.y.z` tags
-- All `runs-on` must be `[cadi-hq-runner-dind-set-v2, cadi-hq-runner-dind-set]` (self-hosted Linux dind) — never GitHub-hosted runners
+- All `runs-on` must be `[ubuntu-latest, cadi-hq-runner-dind-set]` (self-hosted Linux dind) — never GitHub-hosted runners
 - Build tools: native cargo (linux-gnu), cargo-zigbuild/Zig (all other targets — no Docker/cross needed)
 - Windows target: `x86_64-pc-windows-gnu` — never `msvc` (impossible to cross-compile from Linux)
 - All cross-compilation via Zig as linker; Zig ships musl libc and MinGW
