@@ -71,9 +71,7 @@ fn fetch_latest() -> Result<serde_json::Value, Box<dyn std::error::Error>> {
 }
 
 /// Finds the download URL for the ktool asset matching the current target.
-fn find_asset_url(
-    release: &serde_json::Value,
-) -> Result<String, Box<dyn std::error::Error>> {
+fn find_asset_url(release: &serde_json::Value) -> Result<String, Box<dyn std::error::Error>> {
     let assets = release["assets"]
         .as_array()
         .ok_or("GitHub API response missing 'assets'")?;
