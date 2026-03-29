@@ -13,7 +13,7 @@ env:
 jobs:
   check:
     name: Format + Lint + Test
-    runs-on: cadi-hq-runner-dind-set-v2
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v6

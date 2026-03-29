@@ -23,7 +23,7 @@ Both interactive human use and container/CI workflow automation are first-class 
 - **CI**: GitHub Actions (`cargo fmt`, `cargo clippy`, `cargo test`)
 - **Releases**: GitHub Actions on `vx.y.z` tags → GitHub Release artifacts
 - **Cross-compilation**: `cargo-zigbuild` (Zig as linker — no Docker, no `cross`)
-- **Runner**: `cadi-hq-runner-dind-set-v2` (self-hosted Linux dind)
+- **Runner**: `ubuntu-latest` (self-hosted Linux dind)
 
 ## Repository structure
 
@@ -217,7 +217,7 @@ Triggers on every push and PR to `develop`:
 2. `cargo clippy -- -D warnings`
 3. `cargo test`
 
-Runner: `cadi-hq-runner-dind-set-v2`
+Runner: `ubuntu-latest`
 
 ### Release (`cd.yml`)
 Triggers on tag push matching `v[0-9]+.[0-9]+.[0-9]+`:
@@ -226,7 +226,7 @@ Triggers on tag push matching `v[0-9]+.[0-9]+.[0-9]+`:
 3. Archives: `.tar.gz` (Unix), `.zip` (Windows)
 4. Creates GitHub Release with all archives
 
-Runner: `cadi-hq-runner-dind-set-v2`
+Runner: `ubuntu-latest`
 
 **Do not** use `ubuntu-latest`, `macos-latest`, or `windows-latest`.
 **Do not** use `cross` or Docker — `cargo-zigbuild` handles all cross-compilation.

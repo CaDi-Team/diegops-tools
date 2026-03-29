@@ -320,4 +320,4 @@ git tag v1.2.3
 git push origin v1.2.3
 ```
 
-GitHub Actions builds all platform binaries and publishes a GitHub Release. All builds run on self-hosted runners (`cadi-hq-runner-dind-set-v2`). Cross-compilation uses `cargo-zigbuild`.
+GitHub Actions builds all platform binaries and publishes a GitHub Release. All builds run on self-hosted runners (`ubuntu-latest`). Cross-compilation uses `cargo-zigbuild`.
