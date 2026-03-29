@@ -11,4 +11,4 @@
 
 Use this section to tell people how to report a vulnerability.
 
-Please report sensitive information via email to security@cadi-team.com. Do NOT create an issue for a vulnerability.
+Please report sensitive information via email to contact@cadi-labs.com. Do NOT create an issue for a vulnerability.

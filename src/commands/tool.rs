@@ -423,44 +423,29 @@ fn detect_installed_version(binary_path: &Path) -> Option<String> {
 // ---------------------------------------------------------------------------
 
 /// Creates a ureq request builder with standard headers.
-fn http_get(url: &str, token: Option<&str>) -> ureq::Request {
+fn http_get(url: &str) -> ureq::Request {
     let ua = format!("diegops/{}", env!("CARGO_PKG_VERSION"));
-    let mut req = ureq::get(url).set("User-Agent", &ua);
-    if let Some(t) = token {
-        req = req.set("Authorization", &format!("Bearer {t}"));
-    }
-    req
+    ureq::get(url).set("User-Agent", &ua)
 }
 
 /// Fetches the latest release metadata from the GitHub API.
 fn fetch_github_latest(
     repo: &str,
-    token: Option<&str>,
 ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
     let url = format!("https://api.github.com/repos/{repo}/releases/latest");
-    let req = http_get(&url, token).set("Accept", "application/vnd.github.v3+json");
-
-    match req.call() {
-        Ok(resp) => Ok(resp.into_json()?),
-        Err(ureq::Error::Status(404, _)) => {
-            Err(format!("no releases found for {repo} (404)").into())
-        }
-        Err(ureq::Error::Status(403, _)) => Err(
-            "GitHub API rate limit exceeded. Run 'diegops auth gh login <PAT>' for higher limits"
-                .into(),
-        ),
-        Err(e) => Err(e.into()),
-    }
+    let resp = http_get(&url)
+        .set("Accept", "application/vnd.github.v3+json")
+        .call()?;
+    Ok(resp.into_json()?)
 }
 
 /// Fetches the latest version string for a tool.
 fn fetch_latest_version(
     tool: &ToolDef,
-    token: Option<&str>,
 ) -> Result<String, Box<dyn std::error::Error>> {
     match &tool.source {
         ToolSource::GitHub { repo } => {
-            let release = fetch_github_latest(repo, token)?;
+            let release = fetch_github_latest(repo)?;
             let tag = release["tag_name"]
                 .as_str()
                 .ok_or("GitHub API response missing 'tag_name'")?;
@@ -470,7 +455,7 @@ fn fetch_latest_version(
             latest_url,
             download_template: _,
         } => {
-            let resp = http_get(latest_url, None).call()?;
+            let resp = http_get(latest_url).call()?;
             let body = resp.into_string()?;
             Ok(body.trim().to_string())
         }
@@ -499,10 +484,9 @@ fn download_url(tool: &ToolDef, version: &str) -> String {
 }
 
 /// Downloads raw bytes from a URL.
-fn download_bytes(url: &str, token: Option<&str>) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-    let req = http_get(url, token);
+fn download_bytes(url: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let mut buf = Vec::new();
-    req.call()?.into_reader().read_to_end(&mut buf)?;
+    http_get(url).call()?.into_reader().read_to_end(&mut buf)?;
     Ok(buf)
 }
 
@@ -617,11 +601,10 @@ fn extract_from_zip(bytes: &[u8], tool: &ToolDef) -> Result<Vec<u8>, Box<dyn std
 fn download_and_install(
     tool: &ToolDef,
     version: &str,
-    token: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let url = download_url(tool, version);
     eprintln!("Downloading {} {}...", tool.name, version);
-    let bytes = download_bytes(&url, token)?;
+    let bytes = download_bytes(&url)?;
 
     let dest = tool_bin_path(tool)?;
 
@@ -697,10 +680,8 @@ pub fn install(name: &str) -> Result<(), Box<dyn std::error::Error>> {
         format!("unknown tool: '{name}'. Run 'diegops tool list' to see available tools")
     })?;
 
-    let token = super::auth::load_gh_token().ok().flatten();
-
     eprintln!("Fetching latest version of {}...", tool.name);
-    let version = fetch_latest_version(tool, token.as_deref())?;
+    let version = fetch_latest_version(tool)?;
     let version_bare = version.trim_start_matches('v');
 
     // Check if already installed at this version
@@ -714,7 +695,7 @@ pub fn install(name: &str) -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    download_and_install(tool, &version, token.as_deref())?;
+    download_and_install(tool, &version)?;
 
     // Verify
     if dest.exists() {

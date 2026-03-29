@@ -64,9 +64,7 @@ const RELEASES_API: &str = "https://api.github.com/repos/CaDi-Team/diegops-tools
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     eprintln!("Checking for updates...");
 
-    let token = super::auth::load_gh_token().ok().flatten();
-
-    let release = fetch_latest(token.as_deref())?;
+    let release = fetch_latest()?;
 
     let latest_tag = release["tag_name"]
         .as_str()
@@ -82,8 +80,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     println!("Update available: {current} → {latest_tag}");
     eprintln!("Downloading {latest_tag} for {CURRENT_TARGET}...");
 
-    let url = find_asset_url(&release, token.is_some())?;
-    let bytes = download(&url, token.as_deref())?;
+    let url = find_asset_url(&release)?;
+    let bytes = download(&url)?;
 
     eprintln!("Extracting...");
     let binary = extract_binary(&bytes)?;
@@ -99,31 +97,17 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
 // Network helpers
 // ---------------------------------------------------------------------------
 
-fn fetch_latest(token: Option<&str>) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+fn fetch_latest() -> Result<serde_json::Value, Box<dyn std::error::Error>> {
     let ua = format!("diegops/{}", env!("CARGO_PKG_VERSION"));
-    let mut req = ureq::get(RELEASES_API)
+    let resp = ureq::get(RELEASES_API)
         .set("User-Agent", &ua)
-        .set("Accept", "application/vnd.github.v3+json");
-    if let Some(t) = token {
-        req = req.set("Authorization", &format!("Bearer {t}"));
-    }
-    let response = req.call();
-
-    match response {
-        Ok(resp) => Ok(resp.into_json()?),
-        Err(ureq::Error::Status(404, _)) if token.is_none() => {
-            Err("GitHub API returned 404. If this is a private repo, run 'diegops auth gh login <PAT>' first".into())
-        }
-        Err(ureq::Error::Status(401 | 403, _)) => {
-            Err("stored GitHub token is no longer valid. Run 'diegops auth gh login <PAT>' to update it".into())
-        }
-        Err(e) => Err(e.into()),
-    }
+        .set("Accept", "application/vnd.github.v3+json")
+        .call()?;
+    Ok(resp.into_json()?)
 }
 
 fn find_asset_url(
     release: &serde_json::Value,
-    has_token: bool,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let assets = release["assets"]
         .as_array()
@@ -139,16 +123,9 @@ fn find_asset_url(
     for asset in assets {
         if let Some(name) = asset["name"].as_str() {
             if name.ends_with(&suffix) {
-                // Private repos: use the API URL with Accept: application/octet-stream.
-                // Public repos: use browser_download_url (no auth needed).
-                let url_field = if has_token {
-                    "url"
-                } else {
-                    "browser_download_url"
-                };
-                let url = asset[url_field]
+                let url = asset["browser_download_url"]
                     .as_str()
-                    .ok_or(format!("asset missing '{url_field}'"))?;
+                    .ok_or("asset missing 'browser_download_url'")?;
                 return Ok(url.to_owned());
             }
         }
@@ -157,16 +134,14 @@ fn find_asset_url(
     Err(format!("no release asset found for target '{CURRENT_TARGET}'").into())
 }
 
-fn download(url: &str, token: Option<&str>) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+fn download(url: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let ua = format!("diegops/{}", env!("CARGO_PKG_VERSION"));
-    let mut req = ureq::get(url).set("User-Agent", &ua);
-    if let Some(t) = token {
-        req = req.set("Authorization", &format!("Bearer {t}"));
-        // API asset URLs require Accept: application/octet-stream to get the binary.
-        req = req.set("Accept", "application/octet-stream");
-    }
     let mut buf = Vec::new();
-    req.call()?.into_reader().read_to_end(&mut buf)?;
+    ureq::get(url)
+        .set("User-Agent", &ua)
+        .call()?
+        .into_reader()
+        .read_to_end(&mut buf)?;
     Ok(buf)
 }
 
@@ -299,13 +274,12 @@ mod tests {
             "assets": [
                 {
                     "name": format!("diegops-v1.0.0-{suffix}"),
-                    "url": "https://api.github.com/repos/CaDi-Team/diegops-tools/releases/assets/123",
                     "browser_download_url": format!("https://github.com/CaDi-Team/diegops-tools/releases/download/v1.0.0/diegops-v1.0.0-{suffix}")
                 }
             ]
         });
 
-        let url = find_asset_url(&release, false).expect("should find asset");
+        let url = find_asset_url(&release).expect("should find asset");
         assert!(
             url.starts_with("https://github.com/"),
             "expected browser_download_url, got: {url}"
@@ -318,45 +292,19 @@ mod tests {
             "assets": [
                 {
                     "name": "diegops-v1.0.0-some-other-target.tar.gz",
-                    "url": "https://api.example.com/asset/1",
                     "browser_download_url": "https://example.com/download/1"
                 }
             ]
         });
 
-        let result = find_asset_url(&release, false);
+        let result = find_asset_url(&release);
         assert!(result.is_err(), "should error when no matching asset");
-    }
-
-    #[test]
-    fn find_asset_url_uses_url_when_has_token() {
-        let suffix = if cfg!(windows) {
-            format!("{CURRENT_TARGET}.zip")
-        } else {
-            format!("{CURRENT_TARGET}.tar.gz")
-        };
-        let release = serde_json::json!({
-            "assets": [
-                {
-                    "name": format!("diegops-v1.0.0-{suffix}"),
-                    "url": "https://api.github.com/asset/private",
-                    "browser_download_url": "https://github.com/download/public"
-                }
-            ]
-        });
-
-        let with_token = find_asset_url(&release, true).expect("should find asset with token");
-        assert_eq!(with_token, "https://api.github.com/asset/private");
-
-        let without_token =
-            find_asset_url(&release, false).expect("should find asset without token");
-        assert_eq!(without_token, "https://github.com/download/public");
     }
 
     #[test]
     fn find_asset_url_errors_on_missing_assets_array() {
         let release = serde_json::json!({});
-        let result = find_asset_url(&release, false);
+        let result = find_asset_url(&release);
         assert!(result.is_err());
     }
 }
