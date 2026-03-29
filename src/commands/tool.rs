@@ -429,9 +429,7 @@ fn http_get(url: &str) -> ureq::Request {
 }
 
 /// Fetches the latest release metadata from the GitHub API.
-fn fetch_github_latest(
-    repo: &str,
-) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+fn fetch_github_latest(repo: &str) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
     let url = format!("https://api.github.com/repos/{repo}/releases/latest");
     let resp = http_get(&url)
         .set("Accept", "application/vnd.github.v3+json")
@@ -440,9 +438,7 @@ fn fetch_github_latest(
 }
 
 /// Fetches the latest version string for a tool.
-fn fetch_latest_version(
-    tool: &ToolDef,
-) -> Result<String, Box<dyn std::error::Error>> {
+fn fetch_latest_version(tool: &ToolDef) -> Result<String, Box<dyn std::error::Error>> {
     match &tool.source {
         ToolSource::GitHub { repo } => {
             let release = fetch_github_latest(repo)?;
@@ -611,10 +607,7 @@ fn extract_from_zip(bytes: &[u8], tool: &ToolDef) -> Result<Vec<u8>, Box<dyn std
 }
 
 /// Downloads, extracts, and installs a tool at the given version.
-fn download_and_install(
-    tool: &ToolDef,
-    version: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
+fn download_and_install(tool: &ToolDef, version: &str) -> Result<(), Box<dyn std::error::Error>> {
     let url = download_url(tool, version);
     eprintln!("Downloading {} {}...", tool.name, version);
     let bytes = download_bytes(&url)?;
