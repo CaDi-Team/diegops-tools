@@ -386,3 +386,33 @@ fn auth_status_shows_kenv() {
     assert!(stdout.contains("GitHub"), "got: {stdout}");
     assert!(stdout.contains("kenv"), "got: {stdout}");
 }
+
+#[test]
+fn secrets_push_help_exits_successfully() {
+    let output = diegops()
+        .args(["secrets", "push", "--help"])
+        .output()
+        .expect("failed to run diegops secrets push --help");
+
+    assert!(output.status.success());
+}
+
+#[test]
+fn secrets_pull_help_exits_successfully() {
+    let output = diegops()
+        .args(["secrets", "pull", "--help"])
+        .output()
+        .expect("failed to run diegops secrets pull --help");
+
+    assert!(output.status.success());
+}
+
+#[test]
+fn secrets_status_help_exits_successfully() {
+    let output = diegops()
+        .args(["secrets", "status", "--help"])
+        .output()
+        .expect("failed to run diegops secrets status --help");
+
+    assert!(output.status.success());
+}
