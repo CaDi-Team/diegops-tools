@@ -92,6 +92,42 @@ pub fn read_config_file(path: &Path) -> Result<String, Box<dyn std::error::Error
     })
 }
 
+/// Checks that the `vault` CLI is available on PATH.
+pub fn check_vault_binary() -> Result<(), Box<dyn std::error::Error>> {
+    use std::process::Command;
+    match Command::new("vault").arg("--version").output() {
+        Ok(output) if output.status.success() => Ok(()),
+        Ok(_) => Err("vault CLI found but returned an error. Check your installation.".into()),
+        Err(_) => Err(
+            "vault CLI not found on PATH. Install it from https://developer.hashicorp.com/vault/install"
+                .into(),
+        ),
+    }
+}
+
+/// Checks that VAULT_ADDR is set.
+pub fn check_vault_addr() -> Result<(), Box<dyn std::error::Error>> {
+    if std::env::var("VAULT_ADDR").is_err() {
+        return Err("VAULT_ADDR is not set. Export it or configure your Vault client".into());
+    }
+    Ok(())
+}
+
+/// Checks that the current Vault token is valid.
+pub fn check_vault_auth() -> Result<(), Box<dyn std::error::Error>> {
+    use std::process::Command;
+    let output = Command::new("vault")
+        .args(["token", "lookup"])
+        .output()
+        .map_err(|e| format!("could not run vault: {e}"))?;
+
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err("vault is not authenticated. Run 'vault login' first".into())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
