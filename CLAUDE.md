@@ -119,6 +119,10 @@ cargo test
 | `diegops vault apply [--path P] [--config F]` | Pull secrets and write `.env` files |
 | `diegops vault list [--config F]` | Show targets with `.env` |
 | `diegops vault list-diff [--config F]` | Show targets missing `.env` |
+| `diegops secrets init` | Create sample secrets config |
+| `diegops secrets push [--path P] [--config F]` | Upload local files to Vault |
+| `diegops secrets pull [--path P] [--config F]` | Download files from Vault |
+| `diegops secrets status [--config F]` | Compare local vs Vault |
 | `diegops auth gh login <PAT>` | Validate and store GitHub token |
 | `diegops auth gh logout` | Remove GitHub token |
 | `diegops auth gh whoami` | Show authenticated GitHub user |
@@ -170,6 +174,20 @@ Static registry of 10 tools compiled into the binary:
 - `update` downloads from `CaDi-Team/karluiz-tool-cli` GitHub Releases
 - All other args forwarded to the managed binary
 - Version comparison normalizes `v` prefix (tag `v0.2.4` vs output `0.2.4`)
+
+### `diegops secrets` — workstation file sync via Vault
+
+Config: `~/.diegops/secrets.yaml` (override with `--config` or `$DIEGOPS_SECRETS_CONFIG`)
+
+Syncs sensitive workstation files (SSH keys, kubeconfigs, etc.) through Vault KV v2.
+Files are stored as base64-encoded values. Push reads local files and writes to Vault.
+Pull reads from Vault and writes locally with correct permissions.
+
+- Push: `diegops secrets push` — base64-encodes local files and writes to Vault
+- Pull: `diegops secrets pull` — decodes from Vault and writes with permissions (backs up existing files to `.bak`)
+- Status: `diegops secrets status` — shows SYNCED / DIFFERS / LOCAL_ONLY / VAULT_ONLY per file
+- Smart permissions: `*.pub` files get `0644`, everything else `0600`, directories `0700`
+- Per-file mode overrides supported in config
 
 ### `diegops sync` — cloud config backup
 
