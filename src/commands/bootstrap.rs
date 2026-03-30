@@ -21,7 +21,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut results: Vec<StepResult> = Vec::new();
 
     // -- Pre-flight: GitHub --------------------------------------------------
-    eprint!("[1/6] Checking GitHub CLI ... ");
+    eprint!("[1/7] Checking GitHub CLI ... ");
     let gh_user = check_github()?;
     eprintln!("OK ({gh_user})");
     results.push(StepResult {
@@ -31,7 +31,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // -- Pre-flight: Vault ---------------------------------------------------
-    eprint!("[2/6] Checking Vault CLI ... ");
+    eprint!("[2/7] Checking Vault CLI ... ");
     check_vault()?;
     eprintln!("OK");
     results.push(StepResult {
@@ -43,25 +43,31 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     // -- Execution steps (continue on error) ---------------------------------
     let steps: Vec<Step> = vec![
         (
-            "3/6",
+            "3/7",
             "Syncing config from cloud",
             "Config synced from cloud",
             || super::sync::pull(),
         ),
-        ("4/6", "Cloning repositories", "Repositories cloned", || {
+        ("4/7", "Cloning repositories", "Repositories cloned", || {
             super::repo::apply(None, None)
         }),
         (
-            "5/6",
+            "5/7",
             "Injecting .env secrets",
             ".env secrets injected",
             || super::vault::apply(None, None),
         ),
         (
-            "6/6",
+            "6/7",
             "Restoring workstation files",
             "Workstation files restored",
             || super::secrets::pull(None, None),
+        ),
+        (
+            "7/7",
+            "Configuring shell",
+            "Shell configured",
+            || super::shell::init(),
         ),
     ];
 
