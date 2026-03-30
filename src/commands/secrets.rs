@@ -733,9 +733,113 @@ pub fn pull(
     Ok(())
 }
 
-/// Show sync status — stub implementation.
-pub fn status(_config_path: Option<&Path>) -> Result<(), Box<dyn std::error::Error>> {
-    Err("not yet implemented".into())
+/// Shows the sync status of secret files for each configured folder.
+///
+/// Compares local files with Vault keys and reports SYNCED, DIFFERS,
+/// LOCAL_ONLY, or VAULT_ONLY for each file. Uses a BTreeSet for a stable,
+/// sorted union of local filenames and Vault keys.
+pub fn status(config_path: Option<&Path>) -> Result<(), Box<dyn std::error::Error>> {
+    use std::collections::BTreeSet;
+
+    // Pre-flight checks — fatal, exit immediately on failure
+    super::common::check_vault_binary()?;
+    super::common::check_vault_addr()?;
+    super::common::check_vault_auth()?;
+
+    let config = load_config(config_path)?;
+
+    for folder in &config.folders {
+        let dest = super::common::expand_home(&folder.dest);
+        println!("\n{}", folder.dest);
+
+        if !dest.exists() {
+            println!("  MISSING  (directory does not exist)");
+            continue;
+        }
+
+        // Fetch vault state
+        let vault_data = match vault_kv_get(&folder.vault_path) {
+            Ok(map) => map,
+            Err(e) => {
+                eprintln!("  FAIL  {e}");
+                continue;
+            }
+        };
+
+        // Build sorted union of names to compare
+        let mut all_names: BTreeSet<String> = BTreeSet::new();
+
+        match &folder.keys {
+            KeySelector::All(s) if s == "*" => {
+                // Wildcard: union of local files + vault keys
+                match resolve_files_in_dir(&dest) {
+                    Ok(local_names) => {
+                        for n in local_names {
+                            all_names.insert(n);
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("  FAIL  could not list local files: {e}");
+                        continue;
+                    }
+                }
+                for k in vault_data.keys() {
+                    all_names.insert(k.clone());
+                }
+            }
+            KeySelector::All(_) => {
+                eprintln!("  FAIL  invalid key selector (expected \"*\")");
+                continue;
+            }
+            KeySelector::List(entries) => {
+                for entry in entries {
+                    all_names.insert(entry.name().to_string());
+                }
+            }
+        }
+
+        for name in &all_names {
+            let local_path = dest.join(name);
+            let local_exists = local_path.exists();
+            let vault_value = vault_data.get(name).and_then(|v| v.as_str());
+
+            match (local_exists, vault_value) {
+                (false, None) => {
+                    // Should not happen given union logic, but be safe
+                    println!("  ?           {name}");
+                }
+                (true, None) => {
+                    println!("  LOCAL_ONLY  {name}");
+                }
+                (false, Some(_)) => {
+                    println!("  VAULT_ONLY  {name}");
+                }
+                (true, Some(encoded)) => {
+                    let local_content = match fs::read(&local_path) {
+                        Ok(b) => b,
+                        Err(e) => {
+                            eprintln!("  FAIL        could not read '{name}': {e}");
+                            continue;
+                        }
+                    };
+                    let decoded = match base64_decode(encoded) {
+                        Ok(b) => b,
+                        Err(_) => {
+                            println!("  DIFFERS     {name} (vault value not base64)");
+                            continue;
+                        }
+                    };
+                    if local_content == decoded {
+                        println!("  SYNCED      {name}");
+                    } else {
+                        println!("  DIFFERS     {name}");
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
