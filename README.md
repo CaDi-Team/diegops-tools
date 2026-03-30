@@ -246,6 +246,8 @@ diegops sync status     Show diff between local and cloud
 
 **Requires:** GitHub token (`diegops auth gh login` first).
 
+> **Privacy note:** The sync repo does not contain secrets or tokens (those go through Vault), but it may hold sensitive configuration such as hostnames, paths, and tool preferences. The repo is created as **private** — keep it that way.
+
 ---
 
 ## `diegops tool` — Managed DevOps Toolbox
