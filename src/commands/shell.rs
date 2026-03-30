@@ -135,8 +135,7 @@ fn ensure_zsh() -> Result<(), Box<dyn std::error::Error>> {
         run_cmd("sudo", &["apk", "add", "zsh"])?;
     } else {
         return Err(
-            "zsh not found and no supported package manager detected. Install zsh manually."
-                .into(),
+            "zsh not found and no supported package manager detected. Install zsh manually.".into(),
         );
     }
 
@@ -292,17 +291,13 @@ fn command_exists(cmd: &str) -> bool {
 
 /// Returns the full path of a command, or None.
 fn which(cmd: &str) -> Option<String> {
-    Command::new("which")
-        .arg(cmd)
-        .output()
-        .ok()
-        .and_then(|o| {
-            if o.status.success() {
-                Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
-            } else {
-                None
-            }
-        })
+    Command::new("which").arg(cmd).output().ok().and_then(|o| {
+        if o.status.success() {
+            Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
+        } else {
+            None
+        }
+    })
 }
 
 /// Runs a command, returning an error if it fails.

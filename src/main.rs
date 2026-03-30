@@ -66,10 +66,12 @@ enum Commands {
             Requires: GitHub token and Vault session.")]
     Bootstrap,
     /// Set up shell environment (zsh, oh-my-zsh, plugins, config)
-    #[command(long_about = "Set up shell environment — zsh, oh-my-zsh, plugins, and config.\n\n\
+    #[command(
+        long_about = "Set up shell environment — zsh, oh-my-zsh, plugins, and config.\n\n\
             Installs zsh if missing, sets it as default shell, installs oh-my-zsh\n\
             and plugins, writes a managed shell config, and injects source lines.\n\
-            Idempotent — safe to run repeatedly.")]
+            Idempotent — safe to run repeatedly."
+    )]
     Shell {
         #[command(subcommand)]
         cmd: ShellCommand,

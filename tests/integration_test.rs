@@ -441,8 +441,5 @@ fn shell_init_help_exits_successfully() {
 
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(
-        stdout.contains("zsh"),
-        "help should mention zsh: {stdout}"
-    );
+    assert!(stdout.contains("zsh"), "help should mention zsh: {stdout}");
 }

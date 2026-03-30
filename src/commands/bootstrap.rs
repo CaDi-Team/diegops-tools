@@ -63,12 +63,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             "Workstation files restored",
             || super::secrets::pull(None, None),
         ),
-        (
-            "7/7",
-            "Configuring shell",
-            "Shell configured",
-            || super::shell::init(),
-        ),
+        ("7/7", "Configuring shell", "Shell configured", || {
+            super::shell::init()
+        }),
     ];
 
     for (step_num, description, label, action) in steps {
