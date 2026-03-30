@@ -327,6 +327,51 @@ fn resolve_files_in_dir(dir: &Path) -> Result<Vec<String>, Box<dyn std::error::E
     Ok(names)
 }
 
+/// Writes `content` to `path`, creating a `.bak` backup if the file already
+/// exists and its content differs.
+///
+/// Returns `true` if a backup was created (i.e. the file existed and differed),
+/// `false` otherwise (new file, or content identical).
+fn write_file_with_backup(
+    path: &Path,
+    content: &[u8],
+) -> Result<bool, Box<dyn std::error::Error>> {
+    if path.exists() {
+        let existing = fs::read(path)?;
+        if existing == content {
+            return Ok(false);
+        }
+        // Content differs — back up before overwriting
+        let bak = path.with_extension(
+            path.extension()
+                .map(|e| format!("{}.bak", e.to_string_lossy()))
+                .unwrap_or_else(|| "bak".to_string()),
+        );
+        fs::copy(path, &bak)?;
+        fs::write(path, content)?;
+        return Ok(true);
+    }
+    // New file
+    fs::write(path, content)?;
+    Ok(false)
+}
+
+/// Sets Unix file permissions on `path`.
+///
+/// On non-Unix platforms this is a no-op.
+fn set_permissions(path: &Path, mode: u32) -> Result<(), Box<dyn std::error::Error>> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(mode))?;
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (path, mode); // no-op on non-Unix
+    }
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Public entry points
 // ---------------------------------------------------------------------------
@@ -520,12 +565,172 @@ pub fn push(
     Ok(())
 }
 
-/// Pull secret files — stub implementation.
+/// Pulls secret files from Vault into local destination directories.
+///
+/// For each configured folder, fetches Vault KV data, base64-decodes each
+/// value, and writes the result to the destination file. Existing files that
+/// differ are backed up with a `.bak` extension before being overwritten.
 pub fn pull(
-    _config_path: Option<&Path>,
-    _path_filter: Option<&str>,
+    config_path: Option<&Path>,
+    path_filter: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    Err("not yet implemented".into())
+    // Pre-flight checks — fatal, exit immediately on failure
+    super::common::check_vault_binary()?;
+    super::common::check_vault_addr()?;
+    super::common::check_vault_auth()?;
+
+    let config = load_config(config_path)?;
+    let filter = path_filter.map(super::common::expand_home);
+
+    let mut n_written: usize = 0;
+    let mut n_backed_up: usize = 0;
+    let mut n_unchanged: usize = 0;
+    let mut failures: Vec<String> = Vec::new();
+
+    for folder in &config.folders {
+        let dest = super::common::expand_home(&folder.dest);
+
+        if let Some(ref f) = filter {
+            if !dest.starts_with(f) {
+                continue;
+            }
+        }
+
+        eprintln!("\n{}", folder.dest);
+
+        // Ensure destination directory exists
+        if !dest.exists() {
+            let mode = match dir_mode(folder) {
+                Ok(m) => m,
+                Err(e) => {
+                    eprintln!("  FAIL  invalid dir_mode: {e}");
+                    failures.push(folder.dest.clone());
+                    continue;
+                }
+            };
+            if let Err(e) = fs::create_dir_all(&dest) {
+                eprintln!("  FAIL  could not create directory '{}': {e}", dest.display());
+                failures.push(folder.dest.clone());
+                continue;
+            }
+            if let Err(e) = set_permissions(&dest, mode) {
+                eprintln!("  WARN  could not set permissions on '{}': {e}", dest.display());
+            }
+        }
+
+        // Fetch vault data
+        let vault_data = match vault_kv_get(&folder.vault_path) {
+            Ok(map) => map,
+            Err(e) => {
+                eprintln!("  FAIL  {e}");
+                failures.push(folder.dest.clone());
+                continue;
+            }
+        };
+
+        // Resolve which keys to pull
+        let keys_to_pull: Vec<(String, u32)> = match &folder.keys {
+            KeySelector::All(s) if s == "*" => vault_data
+                .keys()
+                .map(|k| (k.clone(), default_mode(k)))
+                .collect(),
+            KeySelector::All(_) => {
+                eprintln!("  FAIL  invalid key selector (expected \"*\")");
+                failures.push(folder.dest.clone());
+                continue;
+            }
+            KeySelector::List(entries) => {
+                let mut result = Vec::new();
+                let mut entry_failed = false;
+                for entry in entries {
+                    let mode = match effective_mode(entry) {
+                        Ok(m) => m,
+                        Err(e) => {
+                            eprintln!("  FAIL  invalid mode for '{}': {e}", entry.name());
+                            entry_failed = true;
+                            break;
+                        }
+                    };
+                    result.push((entry.name().to_string(), mode));
+                }
+                if entry_failed {
+                    failures.push(folder.dest.clone());
+                    continue;
+                }
+                result
+            }
+        };
+
+        let mut folder_failed = false;
+
+        for (key, mode) in &keys_to_pull {
+            let vault_value = match vault_data.get(key) {
+                Some(v) => v.as_str().unwrap_or("").to_string(),
+                None => {
+                    eprintln!("  FAIL  key '{key}' not found at '{}'", folder.vault_path);
+                    folder_failed = true;
+                    break;
+                }
+            };
+
+            let content = match base64_decode(&vault_value) {
+                Ok(bytes) => bytes,
+                Err(e) => {
+                    eprintln!("  FAIL  could not decode '{key}': {e}");
+                    folder_failed = true;
+                    break;
+                }
+            };
+
+            let file_path = dest.join(key);
+            let file_existed = file_path.exists();
+            match write_file_with_backup(&file_path, &content) {
+                Ok(backed_up) => {
+                    if backed_up {
+                        eprintln!("  WRITE {key} (backup created)");
+                        n_backed_up += 1;
+                        n_written += 1;
+                    } else if file_existed {
+                        // File existed and content was identical — nothing written
+                        eprintln!("  SKIP  {key} (unchanged)");
+                        n_unchanged += 1;
+                    } else {
+                        // New file
+                        eprintln!("  WRITE {key}");
+                        n_written += 1;
+                    }
+                    if let Err(e) = set_permissions(&file_path, *mode) {
+                        eprintln!("  WARN  could not set permissions on '{key}': {e}");
+                    }
+                }
+                Err(e) => {
+                    eprintln!("  FAIL  could not write '{key}': {e}");
+                    folder_failed = true;
+                    break;
+                }
+            }
+        }
+
+        if folder_failed {
+            failures.push(folder.dest.clone());
+        }
+    }
+
+    eprintln!();
+    println!(
+        "Done: {n_written} written ({n_backed_up} backed up), {n_unchanged} unchanged, {} failed",
+        failures.len()
+    );
+
+    if !failures.is_empty() {
+        eprintln!("\nFailed folders:");
+        for f in &failures {
+            eprintln!("  {f}");
+        }
+        return Err(format!("{} folder(s) failed", failures.len()).into());
+    }
+
+    Ok(())
 }
 
 /// Show sync status — stub implementation.
@@ -856,6 +1061,73 @@ folders:
 
         let names = resolve_files_in_dir(&dir).unwrap();
         assert_eq!(names, vec!["api.env", "database.env", "readme.txt"]);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // -----------------------------------------------------------------------
+    // write_file_with_backup
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn write_file_with_backup_new_file_no_backup() {
+        let dir = std::env::temp_dir().join(format!(
+            "diegops-test-secrets-backup-new-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let path = dir.join("secret.env");
+        let backed_up = write_file_with_backup(&path, b"content").unwrap();
+
+        assert!(!backed_up);
+        assert_eq!(fs::read(&path).unwrap(), b"content");
+        assert!(!dir.join("secret.env.bak").exists());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_file_with_backup_same_content_no_backup() {
+        let dir = std::env::temp_dir().join(format!(
+            "diegops-test-secrets-backup-same-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let path = dir.join("secret.env");
+        fs::write(&path, b"same content").unwrap();
+
+        let backed_up = write_file_with_backup(&path, b"same content").unwrap();
+
+        assert!(!backed_up);
+        assert_eq!(fs::read(&path).unwrap(), b"same content");
+        assert!(!dir.join("secret.env.bak").exists());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_file_with_backup_different_content_creates_backup() {
+        let dir = std::env::temp_dir().join(format!(
+            "diegops-test-secrets-backup-diff-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let path = dir.join("secret.env");
+        fs::write(&path, b"old content").unwrap();
+
+        let backed_up = write_file_with_backup(&path, b"new content").unwrap();
+
+        assert!(backed_up);
+        assert_eq!(fs::read(&path).unwrap(), b"new content");
+        let bak_path = dir.join("secret.env.bak");
+        assert!(bak_path.exists(), "backup file should exist at {}", bak_path.display());
+        assert_eq!(fs::read(&bak_path).unwrap(), b"old content");
 
         let _ = fs::remove_dir_all(&dir);
     }
