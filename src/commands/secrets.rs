@@ -118,20 +118,14 @@ impl KeyEntry {
 // Permission helpers
 // ---------------------------------------------------------------------------
 
-/// Returns the default mode for a given filename.
+/// Returns the default Unix file mode for a given filename.
 ///
-/// Files ending in `.env` or that are named exactly `*.key`, `*.pem`, or
-/// `*.crt` default to `0o600`; everything else defaults to `0o644`.
+/// Public keys (`*.pub`) get `0644`, everything else gets `0600`.
 fn default_mode(filename: &str) -> u32 {
-    let lower = filename.to_lowercase();
-    if lower.ends_with(".env")
-        || lower.ends_with(".key")
-        || lower.ends_with(".pem")
-        || lower.ends_with(".crt")
-    {
-        0o600
-    } else {
+    if filename.ends_with(".pub") {
         0o644
+    } else {
+        0o600
     }
 }
 
@@ -165,11 +159,11 @@ fn effective_mode(entry: &KeyEntry) -> Result<u32, Box<dyn std::error::Error>> {
 ///
 /// Resolution order:
 /// 1. Explicit `dir_mode` field on the folder (parsed as octal)
-/// 2. Default `0o755`
+/// 2. Default `0o700`
 fn dir_mode(folder: &Folder) -> Result<u32, Box<dyn std::error::Error>> {
     match &folder.dir_mode {
         Some(m) => parse_mode(m),
-        None => Ok(0o755),
+        None => Ok(0o700),
     }
 }
 
@@ -384,24 +378,22 @@ folders:
     // -----------------------------------------------------------------------
 
     #[test]
-    fn default_mode_env_files() {
-        assert_eq!(default_mode("database.env"), 0o600);
-        assert_eq!(default_mode("api.env"), 0o600);
-        assert_eq!(default_mode(".env"), 0o600);
+    fn default_mode_private_key() {
+        assert_eq!(default_mode("id_ed25519"), 0o600);
+        assert_eq!(default_mode("id_rsa"), 0o600);
+        assert_eq!(default_mode("config"), 0o600);
     }
 
     #[test]
-    fn default_mode_key_pem_crt_files() {
-        assert_eq!(default_mode("id_rsa.key"), 0o600);
-        assert_eq!(default_mode("server.pem"), 0o600);
-        assert_eq!(default_mode("server.crt"), 0o600);
+    fn default_mode_public_key() {
+        assert_eq!(default_mode("id_ed25519.pub"), 0o644);
+        assert_eq!(default_mode("id_rsa.pub"), 0o644);
     }
 
     #[test]
     fn default_mode_other_files() {
-        assert_eq!(default_mode("readme.txt"), 0o644);
-        assert_eq!(default_mode("config.yaml"), 0o644);
-        assert_eq!(default_mode("Makefile"), 0o644);
+        assert_eq!(default_mode("known_hosts"), 0o600);
+        assert_eq!(default_mode("kubeconfig"), 0o600);
     }
 
     // -----------------------------------------------------------------------
@@ -442,24 +434,25 @@ folders:
     }
 
     #[test]
-    fn effective_mode_falls_back_to_default_for_env() {
-        let entry = KeyEntry::Simple("database.env".to_string());
+    fn effective_mode_falls_back_to_default_private() {
+        let entry = KeyEntry::Simple("id_ed25519".to_string());
         assert_eq!(effective_mode(&entry).unwrap(), 0o600);
     }
 
     #[test]
-    fn effective_mode_falls_back_to_default_for_txt() {
-        let entry = KeyEntry::Simple("readme.txt".to_string());
+    fn effective_mode_falls_back_to_default_public() {
+        let entry = KeyEntry::Simple("id_ed25519.pub".to_string());
         assert_eq!(effective_mode(&entry).unwrap(), 0o644);
     }
 
     #[test]
-    fn effective_mode_with_no_mode_field() {
+    fn effective_mode_override_wins_over_default() {
         let entry = KeyEntry::WithMode {
-            name: "config.yaml".to_string(),
-            mode: None,
+            name: "id_ed25519.pub".to_string(),
+            mode: Some("0600".to_string()),
         };
-        assert_eq!(effective_mode(&entry).unwrap(), 0o644);
+        // Override should win over smart default (which would be 0644)
+        assert_eq!(effective_mode(&entry).unwrap(), 0o600);
     }
 
     // -----------------------------------------------------------------------
@@ -478,14 +471,14 @@ folders:
     }
 
     #[test]
-    fn dir_mode_defaults_to_0755() {
+    fn dir_mode_defaults_to_0700() {
         let folder = Folder {
             dest: "$HOME/secrets".to_string(),
             vault_path: "secret/app".to_string(),
             keys: KeySelector::List(vec![]),
             dir_mode: None,
         };
-        assert_eq!(dir_mode(&folder).unwrap(), 0o755);
+        assert_eq!(dir_mode(&folder).unwrap(), 0o700);
     }
 
     // -----------------------------------------------------------------------
