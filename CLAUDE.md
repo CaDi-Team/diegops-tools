@@ -111,6 +111,7 @@ cargo test
 | `diegops version` | Print version string |
 | `diegops update` | Self-update from GitHub Releases |
 | `diegops cadi` | Show the DiegOps hero screen |
+| `diegops bootstrap` | Full workstation setup in one shot |
 | `diegops repo init` | Create sample config at `~/.diegops/repos.yaml` |
 | `diegops repo apply [--path P] [--config F]` | Clone all missing repos (idempotent) |
 | `diegops repo list [--config F]` | Show cloned repos |
