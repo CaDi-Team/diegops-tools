@@ -406,6 +406,7 @@ Displays the DiegOps hero screen with ASCII art branding. No arguments, no side 
 ```
 ~/.diegops/
 ├── bin/                 # Managed tool binaries (ktool, gh, jq, etc.)
+├── shell/               # Managed shell config (diegops.zsh, diegops.bash)
 ├── tokens/              # Auth tokens (gh.json) — 0600 permissions
 ├── repos.yaml           # Repository workspace config
 ├── repo-vault.yaml      # Vault secrets config

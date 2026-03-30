@@ -61,7 +61,7 @@ enum Commands {
     /// Bootstrap a fresh workstation in one shot
     #[command(long_about = "Bootstrap a fresh workstation in one shot.\n\n\
             Verifies GitHub and Vault authentication, then runs:\n  \
-            sync pull → repo apply → vault apply → secrets pull\n\n\
+            sync pull → repo apply → vault apply → secrets pull → shell init\n\n\
             Finishes with a summary report and the hero banner.\n\
             Requires: GitHub token and Vault session.")]
     Bootstrap,
