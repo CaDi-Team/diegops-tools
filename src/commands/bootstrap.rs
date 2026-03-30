@@ -85,11 +85,11 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     eprintln!();
     if failures == 0 {
         eprintln!("Workstation ready.");
+        Ok(())
     } else {
         eprintln!("Workstation ready with {failures} error(s).");
-        std::process::exit(1);
+        Err(format!("{failures} bootstrap step(s) failed").into())
     }
-    Ok(())
 }
 
 /// Prints the summary table and returns the number of failures.
