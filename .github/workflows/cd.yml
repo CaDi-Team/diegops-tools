@@ -87,6 +87,9 @@ jobs:
           zig version
           cargo install cargo-zigbuild --locked
 
+      - name: Refresh lock file (downgrade yanked crates)
+        run: cargo update
+
       # ── Build ────────────────────────────────────────────────────────────────
 
       - name: Build (native)

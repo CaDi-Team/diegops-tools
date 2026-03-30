@@ -46,6 +46,9 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
+      - name: Refresh lock file (downgrade yanked crates)
+        run: cargo update
+
       - name: Check formatting
         run: cargo fmt --check
 
