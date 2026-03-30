@@ -58,13 +58,11 @@ enum Commands {
     /// Show the DiegOps hero screen
     Cadi,
     /// Bootstrap a fresh workstation in one shot
-    #[command(
-        long_about = "Bootstrap a fresh workstation in one shot.\n\n\
+    #[command(long_about = "Bootstrap a fresh workstation in one shot.\n\n\
             Verifies GitHub and Vault authentication, then runs:\n  \
             sync pull → repo apply → vault apply → secrets pull\n\n\
             Finishes with a summary report and the hero banner.\n\
-            Requires: GitHub token and Vault session."
-    )]
+            Requires: GitHub token and Vault session.")]
     Bootstrap,
     /// Manage Vault secrets — pull secrets and write .env files
     #[command(
