@@ -75,6 +75,7 @@ diegops help                 Show help
 
 diegops repo ...             Manage git repository workspace
 diegops vault ...            Pull Vault secrets into .env files
+diegops secrets ...          Sync workstation files via Vault
 diegops auth ...             Manage authentication tokens
 diegops devtools ...         Developer workstation setup (git, gpg, ssh)
 diegops sync ...             Cloud-sync config files to GitHub
@@ -244,6 +245,29 @@ diegops ktool update              # install/update ktool
 diegops ktool kenv list           # list kenv secrets
 diegops ktool auth kenv login T   # authenticate with kenv
 ```
+
+---
+
+## `diegops secrets` — Workstation File Sync via Vault
+
+Sync sensitive workstation files (SSH keys, kubeconfigs, etc.) through Vault KV v2.
+
+```
+diegops secrets init                          Create sample config at ~/.diegops/secrets.yaml
+diegops secrets push [--path P] [--config F] Upload local files to Vault
+diegops secrets pull [--path P] [--config F] Download files from Vault
+diegops secrets status [--config F]           Compare local vs Vault
+```
+
+**How it works:**
+- Files are base64-encoded when pushed to Vault and decoded when pulled
+- Smart permissions: `*.pub` files get `0644`, everything else `0600`, directories `0700`
+- `status` shows SYNCED / DIFFERS / LOCAL_ONLY / VAULT_ONLY per file
+- Existing files are backed up to `.bak` before overwrite
+
+**Requires:** `vault` CLI on PATH, `VAULT_ADDR` set, authenticated session.
+
+> Override config path with `--config <path>` or `$DIEGOPS_SECRETS_CONFIG`.
 
 ---
 
