@@ -321,6 +321,30 @@ Displays the DiegOps hero screen with ASCII art branding. No arguments, no side 
 
 ---
 
+## Credits — Karluiz Tools
+
+A huge shout-out and all credit where it truly belongs: to my good friend **[Karluiz](https://karluiz.com/)**.
+
+The `diegops ktool` command and everything it wraps exist because Karluiz built the actual tools. This CLI is just a thin shell to make his work fit into a DevOps-native workflow — the real engineering, the ideas, and the hard work behind those tools are **100% his**. I refuse to take credit for what he created, and I want anyone reading this to know exactly who made it possible.
+
+Karluiz is a developer who has been coding since age 7 on a Commodore 64 — over 30 years of passion poured into every project. His site is a love letter to that journey: retro pixel aesthetics, 8-bit RPG mini-games, and a growing collection of free developer tools that he builds and shares with the community. From CRM systems to hotel management platforms to his suite of ktools, everything he ships is built with genuine passion and generosity.
+
+**His tools are free.** Go check them out, explore his projects, read his blog, and see what a developer driven by pure love for the craft looks like:
+
+**[karluiz.com](https://karluiz.com/)**
+
+<p align="center">
+  <a href="https://karluiz.com/">
+    <img src="docs/images/karluiz-tools.png" alt="Karluiz Tools — a growing collection of free developer tools" width="600" />
+  </a>
+</p>
+
+> *"Every line of code is written with the same passion I felt at age 7."* — Karluiz
+
+Thank you, Karluiz. This project wouldn't have the `ktool` integration without your work. Readers: do yourself a favor and visit his page — you won't regret it.
+
+---
+
 ## Development
 
 ### Prerequisites
