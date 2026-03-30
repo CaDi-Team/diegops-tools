@@ -22,6 +22,7 @@
 use serde::Deserialize;
 use std::fs;
 use std::path::Path;
+use std::process::Command;
 
 // ---------------------------------------------------------------------------
 // Clap sub-command definitions
@@ -196,6 +197,102 @@ fn load_config(path: Option<&Path>) -> Result<SecretsConfig, Box<dyn std::error:
     }
 
     Ok(config)
+}
+
+// ---------------------------------------------------------------------------
+// Base64 helpers
+// ---------------------------------------------------------------------------
+
+/// Encodes bytes to a base64 string using the standard alphabet.
+fn base64_encode(data: &[u8]) -> String {
+    use base64::Engine as _;
+    base64::engine::general_purpose::STANDARD.encode(data)
+}
+
+/// Decodes a base64 string to bytes using the standard alphabet.
+fn base64_decode(encoded: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    use base64::Engine as _;
+    base64::engine::general_purpose::STANDARD
+        .decode(encoded)
+        .map_err(|e| format!("base64 decode error: {e}").into())
+}
+
+// ---------------------------------------------------------------------------
+// Vault interaction helpers
+// ---------------------------------------------------------------------------
+
+/// Fetches all key-value pairs from a Vault KV v2 path.
+///
+/// Returns a map of key → value. On error, returns a user-friendly message.
+fn vault_kv_get(
+    vault_path: &str,
+) -> Result<serde_json::Map<String, serde_json::Value>, Box<dyn std::error::Error>> {
+    let output = Command::new("vault")
+        .args(["kv", "get", "-format=json", vault_path])
+        .output()
+        .map_err(|e| format!("could not run vault: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stderr = stderr.trim();
+        if stderr.contains("permission denied") || stderr.contains("403") {
+            return Err(
+                format!("access denied for '{vault_path}'. Check your Vault policies").into(),
+            );
+        }
+        if stderr.contains("no secrets") || stderr.contains("Not Found") || stderr.contains("404") {
+            return Err(format!(
+                "secret not found at '{vault_path}'. Verify the path exists in Vault"
+            )
+            .into());
+        }
+        return Err(format!("vault kv get failed for '{vault_path}': {stderr}").into());
+    }
+
+    parse_vault_kv_response(&output.stdout, vault_path)
+}
+
+/// Parses the JSON response from `vault kv get -format=json`.
+///
+/// Extracted for testability — the JSON structure is `{ "data": { "data": { ... } } }`.
+fn parse_vault_kv_response(
+    json_bytes: &[u8],
+    vault_path: &str,
+) -> Result<serde_json::Map<String, serde_json::Value>, Box<dyn std::error::Error>> {
+    let json: serde_json::Value = serde_json::from_slice(json_bytes)?;
+    let data = json
+        .get("data")
+        .and_then(|d| d.get("data"))
+        .and_then(|d| d.as_object())
+        .ok_or_else(|| {
+            format!("unexpected JSON structure from vault kv get for '{vault_path}'")
+        })?;
+
+    Ok(data.clone())
+}
+
+/// Writes key-value pairs to a Vault KV v2 path.
+///
+/// Each pair is passed as `key=value` on the command line.
+fn vault_kv_put(
+    vault_path: &str,
+    pairs: &[(&str, &str)],
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::new("vault");
+    cmd.args(["kv", "put", vault_path]);
+    for (key, value) in pairs {
+        cmd.arg(format!("{key}={value}"));
+    }
+    let output = cmd
+        .output()
+        .map_err(|e| format!("could not run vault: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stderr = stderr.trim();
+        return Err(format!("vault kv put failed for '{vault_path}': {stderr}").into());
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -507,5 +604,62 @@ folders:
         init(Some(&dir)).unwrap();
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    // -----------------------------------------------------------------------
+    // base64 round-trip
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn base64_round_trip_text() {
+        let original = b"hello, world!\nthis is a test";
+        let encoded = base64_encode(original);
+        let decoded = base64_decode(&encoded).unwrap();
+        assert_eq!(decoded, original);
+    }
+
+    #[test]
+    fn base64_round_trip_binary() {
+        let original: Vec<u8> = (0u8..=255u8).collect();
+        let encoded = base64_encode(&original);
+        let decoded = base64_decode(&encoded).unwrap();
+        assert_eq!(decoded, original);
+    }
+
+    #[test]
+    fn base64_decode_invalid_returns_error() {
+        assert!(base64_decode("not valid base64!!!").is_err());
+    }
+
+    // -----------------------------------------------------------------------
+    // parse_vault_kv_response
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn parse_vault_kv_response_extracts_data() {
+        let json = br#"{
+            "data": {
+                "data": {
+                    "database.env": "aGVsbG8=",
+                    "api.env": "d29ybGQ="
+                },
+                "metadata": { "version": 1 }
+            }
+        }"#;
+        let data = parse_vault_kv_response(json, "secret/test").unwrap();
+        assert_eq!(data.get("database.env").unwrap().as_str().unwrap(), "aGVsbG8=");
+        assert_eq!(data.get("api.env").unwrap().as_str().unwrap(), "d29ybGQ=");
+        assert_eq!(data.len(), 2);
+    }
+
+    #[test]
+    fn parse_vault_kv_response_rejects_missing_data_data() {
+        let json = br#"{"data": {"wrong": "shape"}}"#;
+        assert!(parse_vault_kv_response(json, "secret/test").is_err());
+    }
+
+    #[test]
+    fn parse_vault_kv_response_rejects_bad_json() {
+        assert!(parse_vault_kv_response(b"not json", "secret/test").is_err());
     }
 }
