@@ -2,7 +2,7 @@
 
 use clap::Subcommand;
 use std::fs;
-use std::path::PathBuf;
+use std::path::Path;
 use std::process::Command;
 
 /// Shell subcommands.
@@ -159,7 +159,7 @@ fn ensure_default_shell() {
 }
 
 /// Checks if oh-my-zsh is installed; clones it if not.
-fn ensure_ohmyzsh(home: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+fn ensure_ohmyzsh(home: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let omz_dir = home.join(".oh-my-zsh");
     if omz_dir.exists() {
         eprintln!("OK (already installed)");
@@ -180,7 +180,7 @@ fn ensure_ohmyzsh(home: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Checks and installs custom oh-my-zsh plugins.
-fn ensure_custom_plugins(home: &PathBuf) {
+fn ensure_custom_plugins(home: &Path) {
     let custom_dir = home.join(".oh-my-zsh").join("custom").join("plugins");
 
     let plugins = [
@@ -210,7 +210,7 @@ fn ensure_custom_plugins(home: &PathBuf) {
 }
 
 /// Writes the managed zsh config file.
-fn write_managed_config(home: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+fn write_managed_config(home: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let shell_dir = home.join(".diegops").join("shell");
     fs::create_dir_all(&shell_dir)?;
 
@@ -222,7 +222,7 @@ fn write_managed_config(home: &PathBuf) -> Result<(), Box<dyn std::error::Error>
 
 /// Injects a source line at the end of an rc file if not already present.
 fn inject_source_line(
-    rc_path: &PathBuf,
+    rc_path: &Path,
     marker: &str,
     source_line: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -249,7 +249,7 @@ fn inject_source_line(
 }
 
 /// Sets up bash support: writes diegops.bash and injects source line.
-fn setup_bash(home: &PathBuf) {
+fn setup_bash(home: &Path) {
     let bashrc = home.join(".bashrc");
     if !bashrc.exists() {
         eprintln!("SKIP (no .bashrc found)");
