@@ -431,3 +431,18 @@ fn bootstrap_help_exits_successfully() {
         "help should mention Bootstrap: {stdout}"
     );
 }
+
+#[test]
+fn shell_init_help_exits_successfully() {
+    let output = diegops()
+        .args(["shell", "init", "--help"])
+        .output()
+        .expect("failed to run diegops shell init --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("zsh"),
+        "help should mention zsh: {stdout}"
+    );
+}
