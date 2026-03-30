@@ -416,3 +416,18 @@ fn secrets_status_help_exits_successfully() {
 
     assert!(output.status.success());
 }
+
+#[test]
+fn bootstrap_help_exits_successfully() {
+    let output = diegops()
+        .args(["bootstrap", "--help"])
+        .output()
+        .expect("failed to run diegops bootstrap --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Bootstrap"),
+        "help should mention Bootstrap: {stdout}"
+    );
+}
