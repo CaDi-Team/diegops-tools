@@ -130,9 +130,9 @@ pub fn apply(
     path_filter: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Pre-flight checks — fatal, exit immediately on failure
-    check_vault_binary()?;
-    check_vault_addr()?;
-    check_vault_auth()?;
+    super::common::check_vault_binary()?;
+    super::common::check_vault_addr()?;
+    super::common::check_vault_auth()?;
 
     let config = load_config(config_path)?;
     let filter = path_filter.map(super::common::expand_home);
@@ -399,40 +399,6 @@ fn build_env_content(secrets: &[(String, String)]) -> String {
 fn format_env_line(key: &str, value: &str) -> String {
     let escaped = value.replace('\\', r"\\").replace('"', r#"\""#);
     format!("{key}=\"{escaped}\"")
-}
-
-/// Checks that the `vault` CLI is available on PATH.
-fn check_vault_binary() -> Result<(), Box<dyn std::error::Error>> {
-    match Command::new("vault").arg("--version").output() {
-        Ok(output) if output.status.success() => Ok(()),
-        Ok(_) => Err("vault CLI found but returned an error. Check your installation.".into()),
-        Err(_) => Err(
-            "vault CLI not found on PATH. Install it from https://developer.hashicorp.com/vault/install"
-                .into(),
-        ),
-    }
-}
-
-/// Checks that VAULT_ADDR is set.
-fn check_vault_addr() -> Result<(), Box<dyn std::error::Error>> {
-    if std::env::var("VAULT_ADDR").is_err() {
-        return Err("VAULT_ADDR is not set. Export it or configure your Vault client".into());
-    }
-    Ok(())
-}
-
-/// Checks that the current Vault token is valid.
-fn check_vault_auth() -> Result<(), Box<dyn std::error::Error>> {
-    let output = Command::new("vault")
-        .args(["token", "lookup"])
-        .output()
-        .map_err(|e| format!("could not run vault: {e}"))?;
-
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err("vault is not authenticated. Run 'vault login' first".into())
-    }
 }
 
 /// Fetches all key-value pairs from a Vault KV v2 path.
