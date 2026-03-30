@@ -1,5 +1,8 @@
 //! The `diegops bootstrap` command — full workstation setup in one shot.
 
+/// A bootstrap step: (step number, progress description, summary label, action).
+type Step = (&'static str, &'static str, &'static str, fn() -> Result<(), Box<dyn std::error::Error>>);
+
 /// Tracks the outcome of a single bootstrap step.
 struct StepResult {
     label: &'static str,
@@ -33,12 +36,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // -- Execution steps (continue on error) ---------------------------------
-    let steps: Vec<(
-        &str,
-        &str,
-        &str,
-        fn() -> Result<(), Box<dyn std::error::Error>>,
-    )> = vec![
+    let steps: Vec<Step> = vec![
         (
             "3/6",
             "Syncing config from cloud",
