@@ -109,6 +109,7 @@ diegops update               Self-update to latest release
 diegops cadi                 Show the DiegOps hero screen
 diegops help                 Show help
 diegops bootstrap            Full workstation setup in one shot
+diegops shell ...            Set up shell environment (zsh, plugins, config)
 
 diegops repo ...             Manage git repository workspace
 diegops vault ...            Pull Vault secrets into .env files
@@ -140,6 +141,7 @@ diegops bootstrap
 4. Clones all configured repositories (`repo apply`)
 5. Injects `.env` secrets from Vault (`vault apply`)
 6. Restores workstation files from Vault (`secrets pull`)
+7. Configures shell environment (`shell init`)
 
 Finishes with the hero banner and a per-step summary. If any execution step fails, it continues with the remaining steps and reports all failures at the end.
 
@@ -330,6 +332,34 @@ diegops secrets status [--config F]           Compare local vs Vault
 **Requires:** `vault` CLI on PATH, `VAULT_ADDR` set, authenticated session.
 
 > Override config path with `--config <path>` or `$DIEGOPS_SECRETS_CONFIG`.
+
+---
+
+## `diegops shell` — Shell Environment Setup
+
+Set up a fully working shell environment from scratch. Idempotent — safe to run repeatedly.
+
+```
+diegops shell init       Install zsh, oh-my-zsh, plugins, and write managed config
+```
+
+**What it does (in order):**
+
+1. Installs zsh if missing (detects apt, brew, dnf, apk)
+2. Sets zsh as the default shell
+3. Installs oh-my-zsh if missing
+4. Clones custom plugins (zsh-autosuggestions, zsh-syntax-highlighting)
+5. Writes managed config to `~/.diegops/shell/diegops.zsh`
+6. Injects `source` line at the end of `~/.zshrc`
+7. Sets up bash equivalent (`~/.diegops/shell/diegops.bash`)
+
+**Managed config includes:**
+- Oh-my-zsh with plugins: git, kubectl, docker, terraform, helm, gh, ansible, colored-man-pages, command-not-found, zsh-autosuggestions, zsh-syntax-highlighting
+- `~/.diegops/bin/` added to PATH (managed tools)
+- Automatic kubeconfig discovery from `~/.kube/`
+- Standard aliases and environment variables
+
+**How it works:** The managed config is loaded last from `~/.zshrc`, so it takes priority. Machine-specific overrides go after the source line in your `.zshrc`. The managed files live in `~/.diegops/shell/` and are automatically synced via `diegops sync`.
 
 ---
 
