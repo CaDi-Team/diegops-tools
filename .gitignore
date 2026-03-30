@@ -15,3 +15,6 @@ Cargo.lock.bak
 # Build outputs
 build/
 dist/
+
+# Internal design docs (superpowers workflow artifacts)
+docs/superpowers/
