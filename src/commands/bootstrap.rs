@@ -33,33 +33,36 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // -- Execution steps (continue on error) ---------------------------------
-    let steps: Vec<(&str, &str, fn() -> Result<(), Box<dyn std::error::Error>>)> = vec![
-        ("3/6", "Syncing config from cloud", || super::sync::pull()),
-        ("4/6", "Cloning repositories", || {
+    let steps: Vec<(
+        &str,
+        &str,
+        &str,
+        fn() -> Result<(), Box<dyn std::error::Error>>,
+    )> = vec![
+        ("3/6", "Syncing config from cloud", "Config synced from cloud", || {
+            super::sync::pull()
+        }),
+        ("4/6", "Cloning repositories", "Repositories cloned", || {
             super::repo::apply(None, None)
         }),
-        ("5/6", "Injecting .env secrets", || {
+        ("5/6", "Injecting .env secrets", ".env secrets injected", || {
             super::vault::apply(None, None)
         }),
-        ("6/6", "Restoring workstation files", || {
-            super::secrets::pull(None, None)
-        }),
+        (
+            "6/6",
+            "Restoring workstation files",
+            "Workstation files restored",
+            || super::secrets::pull(None, None),
+        ),
     ];
 
-    let labels = [
-        "Config synced from cloud",
-        "Repositories cloned",
-        ".env secrets injected",
-        "Workstation files restored",
-    ];
-
-    for (i, (step_num, description, action)) in steps.into_iter().enumerate() {
+    for (step_num, description, label, action) in steps {
         eprint!("[{step_num}] {description} ... ");
         match action() {
             Ok(()) => {
                 eprintln!("OK");
                 results.push(StepResult {
-                    label: labels[i],
+                    label,
                     ok: true,
                     detail: String::new(),
                 });
@@ -67,7 +70,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             Err(e) => {
                 eprintln!("FAILED");
                 results.push(StepResult {
-                    label: labels[i],
+                    label,
                     ok: false,
                     detail: e.to_string(),
                 });
