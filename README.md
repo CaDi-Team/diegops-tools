@@ -5,6 +5,25 @@
 
 Personal productivity CLI for humans and containers — workspace management, secret injection, cloud config sync, managed DevOps toolbox, and developer workstation setup in a single static binary.
 
+### Prerequisites
+
+`diegops` currently depends on two external CLIs for most of its functionality:
+
+| Dependency | Used by | Install |
+|------------|---------|---------|
+| **[GitHub CLI (`gh`)](https://cli.github.com/)** | `auth`, `sync`, `bootstrap` | `diegops tool install gh` |
+| **[HashiCorp Vault (`vault`)](https://developer.hashicorp.com/vault)** | `vault`, `secrets`, `bootstrap` | `diegops tool install vault` |
+
+Both must be installed and authenticated before using the commands listed above. You can install them with `diegops tool install` or bring your own. More backend options are planned for the future, but **as of today these are hard requirements**.
+
+```sh
+diegops tool install gh         # install GitHub CLI
+diegops tool install vault      # install Vault CLI
+diegops auth gh login <PAT>     # authenticate with GitHub
+vault login                     # authenticate with Vault
+diegops bootstrap               # you're ready
+```
+
 ---
 
 ## Supported Platforms

@@ -3,8 +3,18 @@ name: CI
 on:
   pull_request:
     branches: ["develop", "main"]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE"
+      - ".gitignore"
   push:
     branches: ["develop", "main"]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE"
+      - ".gitignore"
 
 env:
   CARGO_TERM_COLOR: always
