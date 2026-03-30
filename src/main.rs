@@ -6,6 +6,7 @@ use commands::devtools::{DevtoolsCommand, GitCommand, GpgCommand, SshCommand};
 use commands::repo::RepoCommand;
 use commands::sync::SyncCommand;
 use commands::tool::ToolCommand;
+use commands::secrets::SecretsCommand;
 use commands::vault::VaultCommand;
 
 #[derive(Parser)]
@@ -68,6 +69,19 @@ enum Commands {
     Vault {
         #[command(subcommand)]
         cmd: VaultCommand,
+    },
+    /// Manage secret files — push, pull, and status
+    #[command(
+        long_about = "Manage secret files — push, pull, and check sync status.\n\n\
+        Config: ~/.diegops/secrets.yaml (override with --config or $DIEGOPS_SECRETS_CONFIG)\n\n\
+        Quick start:\n  \
+        diegops secrets init    # create sample config\n  \
+        diegops secrets push    # push secret files to destinations\n  \
+        diegops secrets status  # show sync state"
+    )]
+    Secrets {
+        #[command(subcommand)]
+        cmd: SecretsCommand,
     },
     /// Manage authentication tokens (GitHub, kenv)
     #[command(long_about = "Manage authentication tokens for external services.\n\n\
@@ -205,6 +219,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 VaultCommand::Init => {
                     commands::vault::init(None)?;
+                }
+            }
+        }
+        Some(Commands::Secrets { cmd }) => {
+            let config_path_str;
+            match cmd {
+                SecretsCommand::Push { path, config } => {
+                    config_path_str = config;
+                    let cfg = config_path_str.as_deref().map(std::path::Path::new);
+                    commands::secrets::push(cfg, path.as_deref())?;
+                }
+                SecretsCommand::Pull { path, config } => {
+                    config_path_str = config;
+                    let cfg = config_path_str.as_deref().map(std::path::Path::new);
+                    commands::secrets::pull(cfg, path.as_deref())?;
+                }
+                SecretsCommand::Status { config } => {
+                    config_path_str = config;
+                    let cfg = config_path_str.as_deref().map(std::path::Path::new);
+                    commands::secrets::status(cfg)?;
+                }
+                SecretsCommand::Init => {
+                    commands::secrets::init(None)?;
                 }
             }
         }

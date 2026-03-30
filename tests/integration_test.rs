@@ -351,6 +351,31 @@ fn unknown_tool_passthrough_shows_error() {
 }
 
 #[test]
+fn secrets_help_exits_successfully() {
+    let output = diegops()
+        .args(["secrets", "--help"])
+        .output()
+        .expect("failed to run diegops secrets --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("init"), "got: {stdout}");
+    assert!(stdout.contains("push"), "got: {stdout}");
+    assert!(stdout.contains("pull"), "got: {stdout}");
+    assert!(stdout.contains("status"), "got: {stdout}");
+}
+
+#[test]
+fn secrets_init_help_exits_successfully() {
+    let output = diegops()
+        .args(["secrets", "init", "--help"])
+        .output()
+        .expect("failed to run diegops secrets init --help");
+
+    assert!(output.status.success());
+}
+
+#[test]
 fn auth_status_shows_kenv() {
     let output = diegops()
         .args(["auth", "status"])

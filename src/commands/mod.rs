@@ -12,6 +12,7 @@ pub mod devtools_gpg;
 pub mod devtools_ssh;
 pub mod ktool;
 pub mod repo;
+pub mod secrets;
 pub mod sync;
 pub mod tool;
 pub mod update;
