@@ -1,7 +1,12 @@
 //! The `diegops bootstrap` command — full workstation setup in one shot.
 
 /// A bootstrap step: (step number, progress description, summary label, action).
-type Step = (&'static str, &'static str, &'static str, fn() -> Result<(), Box<dyn std::error::Error>>);
+type Step = (
+    &'static str,
+    &'static str,
+    &'static str,
+    fn() -> Result<(), Box<dyn std::error::Error>>,
+);
 
 /// Tracks the outcome of a single bootstrap step.
 struct StepResult {
