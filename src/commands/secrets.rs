@@ -296,6 +296,38 @@ fn vault_kv_put(
 }
 
 // ---------------------------------------------------------------------------
+// File helpers
+// ---------------------------------------------------------------------------
+
+/// Lists regular (non-dot, non-.bak) files in `dir`, non-recursive, sorted.
+///
+/// Returns file names (not full paths) as strings. Directories, dotfiles,
+/// and `.bak` files are skipped.
+fn resolve_files_in_dir(dir: &Path) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    let mut names: Vec<String> = Vec::new();
+    for entry in fs::read_dir(dir)
+        .map_err(|e| format!("could not read directory '{}': {e}", dir.display()))?
+    {
+        let entry = entry?;
+        let ft = entry.file_type()?;
+        if !ft.is_file() {
+            continue;
+        }
+        let name = entry.file_name();
+        let name_str = name.to_string_lossy();
+        if name_str.starts_with('.') {
+            continue;
+        }
+        if name_str.ends_with(".bak") {
+            continue;
+        }
+        names.push(name_str.into_owned());
+    }
+    names.sort();
+    Ok(names)
+}
+
+// ---------------------------------------------------------------------------
 // Public entry points
 // ---------------------------------------------------------------------------
 
@@ -349,12 +381,143 @@ folders:
       - name: api.env
 ";
 
-/// Push secret files — stub implementation.
+/// Pushes local secret files to Vault.
+///
+/// For each configured folder, reads local files, base64-encodes their content,
+/// and writes to Vault only when the value has changed.
 pub fn push(
-    _config_path: Option<&Path>,
-    _path_filter: Option<&str>,
+    config_path: Option<&Path>,
+    path_filter: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    Err("not yet implemented".into())
+    // Pre-flight checks — fatal, exit immediately on failure
+    super::common::check_vault_binary()?;
+    super::common::check_vault_addr()?;
+    super::common::check_vault_auth()?;
+
+    let config = load_config(config_path)?;
+    let filter = path_filter.map(super::common::expand_home);
+
+    let mut n_pushed: usize = 0;
+    let mut n_unchanged: usize = 0;
+    let mut failures: Vec<String> = Vec::new();
+
+    for folder in &config.folders {
+        let dest = super::common::expand_home(&folder.dest);
+
+        if let Some(ref f) = filter {
+            if !dest.starts_with(f) {
+                continue;
+            }
+        }
+
+        eprintln!("\n{}", folder.dest);
+
+        if !dest.exists() {
+            eprintln!(
+                "  FAIL  destination directory '{}' does not exist",
+                dest.display()
+            );
+            failures.push(format!("{} (directory missing)", folder.dest));
+            continue;
+        }
+
+        // Determine file list to push
+        let file_names: Vec<String> = match &folder.keys {
+            KeySelector::All(s) if s == "*" => match resolve_files_in_dir(&dest) {
+                Ok(names) => names,
+                Err(e) => {
+                    eprintln!("  FAIL  could not list files: {e}");
+                    failures.push(folder.dest.clone());
+                    continue;
+                }
+            },
+            KeySelector::All(_) => {
+                eprintln!("  FAIL  invalid key selector (expected \"*\")");
+                failures.push(folder.dest.clone());
+                continue;
+            }
+            KeySelector::List(entries) => entries.iter().map(|e| e.name().to_string()).collect(),
+        };
+
+        if file_names.is_empty() {
+            eprintln!("  SKIP  no files to push");
+            continue;
+        }
+
+        // Fetch current vault state for comparison (treat missing path as empty)
+        let vault_state = vault_kv_get(&folder.vault_path).unwrap_or_default();
+
+        // Read and encode each file, collect pairs that differ from vault
+        let mut pairs: Vec<(String, String)> = Vec::new();
+        let mut folder_failed = false;
+
+        for name in &file_names {
+            let file_path = dest.join(name);
+            let content = match fs::read(&file_path) {
+                Ok(bytes) => bytes,
+                Err(e) => {
+                    eprintln!("  FAIL  could not read '{}': {e}", file_path.display());
+                    folder_failed = true;
+                    break;
+                }
+            };
+            let encoded = base64_encode(&content);
+
+            // Compare with current vault value
+            let vault_value = vault_state
+                .get(name)
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+
+            if vault_value == encoded {
+                eprintln!("  SKIP  {name} (unchanged)");
+                n_unchanged += 1;
+            } else {
+                pairs.push((name.clone(), encoded));
+            }
+        }
+
+        if folder_failed {
+            failures.push(folder.dest.clone());
+            continue;
+        }
+
+        if pairs.is_empty() {
+            continue;
+        }
+
+        // Push all changed pairs in one vault kv put call
+        let kv_pairs: Vec<(&str, &str)> =
+            pairs.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+        match vault_kv_put(&folder.vault_path, &kv_pairs) {
+            Ok(()) => {
+                for (name, _) in &pairs {
+                    eprintln!("  PUSH  {name}");
+                    n_pushed += 1;
+                }
+            }
+            Err(e) => {
+                eprintln!("  FAIL  {e}");
+                failures.push(folder.dest.clone());
+            }
+        }
+    }
+
+    eprintln!();
+    println!(
+        "Done: {n_pushed} pushed, {n_unchanged} unchanged, {} failed",
+        failures.len()
+    );
+
+    if !failures.is_empty() {
+        eprintln!("\nFailed folders:");
+        for f in &failures {
+            eprintln!("  {f}");
+        }
+        return Err(format!("{} folder(s) failed", failures.len()).into());
+    }
+
+    Ok(())
 }
 
 /// Pull secret files — stub implementation.
@@ -661,5 +824,39 @@ folders:
     #[test]
     fn parse_vault_kv_response_rejects_bad_json() {
         assert!(parse_vault_kv_response(b"not json", "secret/test").is_err());
+    }
+
+    // -----------------------------------------------------------------------
+    // resolve_files_in_dir
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn resolve_files_in_dir_returns_sorted_regular_files_only() {
+        let dir = std::env::temp_dir().join(format!(
+            "diegops-test-secrets-resolve-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        // Regular files that should be returned
+        fs::write(dir.join("api.env"), b"x").unwrap();
+        fs::write(dir.join("database.env"), b"x").unwrap();
+        fs::write(dir.join("readme.txt"), b"x").unwrap();
+
+        // Dotfiles — should be skipped
+        fs::write(dir.join(".gitignore"), b"x").unwrap();
+        fs::write(dir.join(".hidden"), b"x").unwrap();
+
+        // .bak files — should be skipped
+        fs::write(dir.join("database.env.bak"), b"x").unwrap();
+
+        // Subdirectory — should be skipped
+        fs::create_dir_all(dir.join("subdir")).unwrap();
+
+        let names = resolve_files_in_dir(&dir).unwrap();
+        assert_eq!(names, vec!["api.env", "database.env", "readme.txt"]);
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }
