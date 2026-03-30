@@ -39,15 +39,24 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         &str,
         fn() -> Result<(), Box<dyn std::error::Error>>,
     )> = vec![
-        ("3/6", "Syncing config from cloud", "Config synced from cloud", || {
-            super::sync::pull()
-        }),
-        ("4/6", "Cloning repositories", "Repositories cloned", || {
-            super::repo::apply(None, None)
-        }),
-        ("5/6", "Injecting .env secrets", ".env secrets injected", || {
-            super::vault::apply(None, None)
-        }),
+        (
+            "3/6",
+            "Syncing config from cloud",
+            "Config synced from cloud",
+            || super::sync::pull(),
+        ),
+        (
+            "4/6",
+            "Cloning repositories",
+            "Repositories cloned",
+            || super::repo::apply(None, None),
+        ),
+        (
+            "5/6",
+            "Injecting .env secrets",
+            ".env secrets injected",
+            || super::vault::apply(None, None),
+        ),
         (
             "6/6",
             "Restoring workstation files",
