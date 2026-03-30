@@ -5,6 +5,7 @@ use commands::auth::{AuthCommand, GhCommand};
 use commands::devtools::{DevtoolsCommand, GitCommand, GpgCommand, SshCommand};
 use commands::repo::RepoCommand;
 use commands::secrets::SecretsCommand;
+use commands::shell::ShellCommand;
 use commands::sync::SyncCommand;
 use commands::tool::ToolCommand;
 use commands::vault::VaultCommand;
@@ -64,6 +65,15 @@ enum Commands {
             Finishes with a summary report and the hero banner.\n\
             Requires: GitHub token and Vault session.")]
     Bootstrap,
+    /// Set up shell environment (zsh, oh-my-zsh, plugins, config)
+    #[command(long_about = "Set up shell environment — zsh, oh-my-zsh, plugins, and config.\n\n\
+            Installs zsh if missing, sets it as default shell, installs oh-my-zsh\n\
+            and plugins, writes a managed shell config, and injects source lines.\n\
+            Idempotent — safe to run repeatedly.")]
+    Shell {
+        #[command(subcommand)]
+        cmd: ShellCommand,
+    },
     /// Manage Vault secrets — pull secrets and write .env files
     #[command(
         long_about = "Manage Vault secrets — pull secrets and write .env files.\n\n\
@@ -186,6 +196,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(Commands::Bootstrap) => {
             commands::bootstrap::run()?;
         }
+        Some(Commands::Shell { cmd }) => match cmd {
+            ShellCommand::Init => {
+                commands::shell::init()?;
+            }
+        },
         Some(Commands::Repo { cmd }) => {
             let config_path_str;
             match cmd {

@@ -14,6 +14,7 @@ pub mod devtools_ssh;
 pub mod ktool;
 pub mod repo;
 pub mod secrets;
+pub mod shell;
 pub mod sync;
 pub mod tool;
 pub mod update;
