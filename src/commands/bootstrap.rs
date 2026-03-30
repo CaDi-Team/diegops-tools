@@ -45,12 +45,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             "Config synced from cloud",
             || super::sync::pull(),
         ),
-        (
-            "4/6",
-            "Cloning repositories",
-            "Repositories cloned",
-            || super::repo::apply(None, None),
-        ),
+        ("4/6", "Cloning repositories", "Repositories cloned", || {
+            super::repo::apply(None, None)
+        }),
         (
             "5/6",
             "Injecting .env secrets",

@@ -16,7 +16,7 @@ It does this by treating **GitHub as the source of truth for configuration** and
 
 On top of that, `diegops` bundles a **managed toolbox** (`diegops tool`) that downloads and updates common DevOps CLIs (gh, vault, terraform, helm, kubectl, jq, yq, k9s, trivy, trippy) so you don't need `brew`, `apt`, or manual downloads.
 
-`diegops` also integrates **[ktool](https://karluiz.com/)** — a growing suite of free developer tools built by [Karluiz](https://karluiz.com/). Today `diegops ktool` manages the ktool binary and proxies commands like `kenv` for secret management. As ktool expands its capabilities, `diegops` will grow with it — ktool integration is a core part of the roadmap.
+`diegops` also integrates **[ktool cli](https://github.com/CaDi-Team/karluiz-tool-cli)** — a growing suite of free developer tools built by [Karluiz](https://karluiz.com/). Today `diegops ktool` manages the ktool binary and proxies commands like `kenv` for secret management. As ktool expands its capabilities, `diegops` will grow with it — ktool integration is a core part of the roadmap.
 
 The end result: run `diegops bootstrap` on a fresh machine and walk away with a fully configured workstation.
 
