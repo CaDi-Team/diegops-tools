@@ -137,11 +137,6 @@ fn default_mode(filename: &str) -> u32 {
 fn parse_mode(mode_str: &str) -> Result<u32, Box<dyn std::error::Error>> {
     u32::from_str_radix(mode_str.trim_start_matches('0'), 8)
         .map_err(|e| format!("invalid mode '{}': {e}", mode_str).into())
-        .and_then(|v| {
-            // Re-parse with leading zero stripped; re-add the octal prefix
-            // by parsing the whole string directly.
-            Ok(v)
-        })
 }
 
 /// Returns the effective octal mode for a `KeyEntry`.
