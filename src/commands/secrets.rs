@@ -174,11 +174,8 @@ fn dir_mode(folder: &Folder) -> Result<u32, Box<dyn std::error::Error>> {
 
 /// Loads and validates the secrets config from the resolved path.
 fn load_config(path: Option<&Path>) -> Result<SecretsConfig, Box<dyn std::error::Error>> {
-    let config_path = super::common::resolve_config_path(
-        path,
-        "DIEGOPS_SECRETS_CONFIG",
-        "secrets.yaml",
-    )?;
+    let config_path =
+        super::common::resolve_config_path(path, "DIEGOPS_SECRETS_CONFIG", "secrets.yaml")?;
     let content = super::common::read_config_file(&config_path)?;
     let config: SecretsConfig = serde_yaml::from_str(&content)
         .map_err(|e| format!("invalid secrets config {}: {e}", config_path.display()))?;
@@ -264,9 +261,7 @@ fn parse_vault_kv_response(
         .get("data")
         .and_then(|d| d.get("data"))
         .and_then(|d| d.as_object())
-        .ok_or_else(|| {
-            format!("unexpected JSON structure from vault kv get for '{vault_path}'")
-        })?;
+        .ok_or_else(|| format!("unexpected JSON structure from vault kv get for '{vault_path}'"))?;
 
     Ok(data.clone())
 }
@@ -332,10 +327,7 @@ fn resolve_files_in_dir(dir: &Path) -> Result<Vec<String>, Box<dyn std::error::E
 ///
 /// Returns `true` if a backup was created (i.e. the file existed and differed),
 /// `false` otherwise (new file, or content identical).
-fn write_file_with_backup(
-    path: &Path,
-    content: &[u8],
-) -> Result<bool, Box<dyn std::error::Error>> {
+fn write_file_with_backup(path: &Path, content: &[u8]) -> Result<bool, Box<dyn std::error::Error>> {
     if path.exists() {
         let existing = fs::read(path)?;
         if existing == content {
@@ -551,10 +543,7 @@ pub fn push(
             let encoded = base64_encode(&content);
 
             // Compare with current vault value
-            let vault_value = vault_state
-                .get(name)
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let vault_value = vault_state.get(name).and_then(|v| v.as_str()).unwrap_or("");
 
             if vault_value == encoded {
                 eprintln!("  SKIP  {name} (unchanged)");
@@ -574,8 +563,10 @@ pub fn push(
         }
 
         // Push all changed pairs in one vault kv put call
-        let kv_pairs: Vec<(&str, &str)> =
-            pairs.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+        let kv_pairs: Vec<(&str, &str)> = pairs
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
         match vault_kv_put(&folder.vault_path, &kv_pairs) {
             Ok(()) => {
                 for (name, _) in &pairs {
@@ -651,12 +642,18 @@ pub fn pull(
                 }
             };
             if let Err(e) = fs::create_dir_all(&dest) {
-                eprintln!("  FAIL  could not create directory '{}': {e}", dest.display());
+                eprintln!(
+                    "  FAIL  could not create directory '{}': {e}",
+                    dest.display()
+                );
                 failures.push(folder.dest.clone());
                 continue;
             }
             if let Err(e) = set_permissions(&dest, mode) {
-                eprintln!("  WARN  could not set permissions on '{}': {e}", dest.display());
+                eprintln!(
+                    "  WARN  could not set permissions on '{}': {e}",
+                    dest.display()
+                );
             }
         }
 
@@ -1098,8 +1095,8 @@ folders:
 
     #[test]
     fn init_creates_sample_config() {
-        let dir = std::env::temp_dir()
-            .join(format!("diegops-test-secrets-init-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("diegops-test-secrets-init-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
 
@@ -1161,7 +1158,10 @@ folders:
             }
         }"#;
         let data = parse_vault_kv_response(json, "secret/test").unwrap();
-        assert_eq!(data.get("database.env").unwrap().as_str().unwrap(), "aGVsbG8=");
+        assert_eq!(
+            data.get("database.env").unwrap().as_str().unwrap(),
+            "aGVsbG8="
+        );
         assert_eq!(data.get("api.env").unwrap().as_str().unwrap(), "d29ybGQ=");
         assert_eq!(data.len(), 2);
     }
@@ -1272,7 +1272,11 @@ folders:
         assert!(backed_up);
         assert_eq!(fs::read(&path).unwrap(), b"new content");
         let bak_path = dir.join("secret.env.bak");
-        assert!(bak_path.exists(), "backup file should exist at {}", bak_path.display());
+        assert!(
+            bak_path.exists(),
+            "backup file should exist at {}",
+            bak_path.display()
+        );
         assert_eq!(fs::read(&bak_path).unwrap(), b"old content");
 
         let _ = fs::remove_dir_all(&dir);
