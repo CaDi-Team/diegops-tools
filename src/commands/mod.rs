@@ -4,6 +4,7 @@
 //! `pub fn run(...) -> Result<(), Box<dyn std::error::Error>>` entry point.
 
 pub mod auth;
+pub mod bootstrap;
 pub mod cadi;
 pub mod common;
 pub mod devtools;
