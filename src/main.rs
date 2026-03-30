@@ -4,9 +4,9 @@ use clap::{CommandFactory, Parser, Subcommand};
 use commands::auth::{AuthCommand, GhCommand};
 use commands::devtools::{DevtoolsCommand, GitCommand, GpgCommand, SshCommand};
 use commands::repo::RepoCommand;
+use commands::secrets::SecretsCommand;
 use commands::sync::SyncCommand;
 use commands::tool::ToolCommand;
-use commands::secrets::SecretsCommand;
 use commands::vault::VaultCommand;
 
 #[derive(Parser)]
