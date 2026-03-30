@@ -405,25 +405,67 @@ const SAMPLE_SECRETS_CONFIG: &str = "\
 # diegops secrets configuration
 #
 # Each folder maps a local destination directory to a Vault secret path.
-# Run `diegops secrets push` to write secret files.
+# Run `diegops secrets push` to upload local files to Vault.
+# Run `diegops secrets pull` to download files from Vault.
 # Run `diegops secrets status` to see the current sync state.
 #
 # Path rules:
 #   - Use $HOME as a portable prefix (works on Linux, macOS, and WSL).
 #   - vault_path uses the logical Vault path (no /data/ segment).
-#   - keys: list specific file names, or use \"*\" to use all keys.
-#   - dir_mode sets the directory permissions (default: \"0755\").
-#   - mode per key sets the file permissions (default: \"0600\" for .env/.key/.pem/.crt, else \"0644\").
+#   - keys: list specific file names, or use \"*\" to pull all keys from Vault.
+#   - dir_mode sets the directory permissions (default: \"0700\").
+#   - mode per key overrides the default file permissions.
+#   - Default permissions: *.pub -> 0644, everything else -> 0600.
+#
+# Workflow:
+#   1. Edit this file to list the folders and files you want to sync.
+#   2. Run `diegops secrets push` to upload your local files to Vault.
+#   3. On a new machine, run `diegops secrets pull` to restore them.
 
 folders:
 
-  - dest: $HOME/github/my-org/products/my-product/secrets
-    vault_path: secret/my-product
+  # ── SSH keys and config ──────────────────────────────────────────────
+  # Syncs your SSH directory so you can restore keys on a new machine.
+  # Files are base64-encoded in Vault at the given vault_path.
+  - dest: $HOME/.ssh
+    vault_path: secret/workstation/ssh
     dir_mode: \"0700\"
     keys:
-      - name: database.env
+      - name: id_ed25519
         mode: \"0600\"
-      - name: api.env
+      - name: id_ed25519.pub
+        mode: \"0644\"
+      - name: config
+        mode: \"0600\"
+
+  # ── Kubernetes config ────────────────────────────────────────────────
+  # Use \"*\" to sync all files from the Vault path without listing each one.
+  - dest: $HOME/.kube
+    vault_path: secret/workstation/kube
+    dir_mode: \"0700\"
+    keys: \"*\"
+
+  # ── VS Code / Antigravity workspaces ──────────────────────────────────
+  # Workspace files are portable JSON — sync them to get the same
+  # multi-root layout, settings, and extensions on every machine.
+  # Works well with `diegops repo apply` since repos are cloned to
+  # predictable $HOME paths.
+  # - dest: $HOME/.diegops/workspaces
+  #   vault_path: secret/workstation/workspaces
+  #   dir_mode: \"0700\"
+  #   keys:
+  #     - name: my-project.code-workspace
+  #       mode: \"0644\"
+
+  # ── Custom project secrets (example) ─────────────────────────────────
+  # You can also sync .env files or other secrets for specific projects.
+  # - dest: $HOME/github/my-org/my-project/secrets
+  #   vault_path: secret/my-project
+  #   dir_mode: \"0700\"
+  #   keys:
+  #     - name: database.env
+  #       mode: \"0600\"
+  #     - name: api.env
 ";
 
 /// Pushes local secret files to Vault.
