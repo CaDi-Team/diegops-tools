@@ -345,6 +345,27 @@ Thank you, Karluiz. This project wouldn't have the `ktool` integration without y
 
 ---
 
+## Acknowledgements — Open Source Tools
+
+`diegops tool` wouldn't exist without the incredible open-source projects it wraps. These tools are built and maintained by talented people and teams who share their work freely with the community. If you find them useful through `diegops`, consider using them directly, starring their repos, and supporting their maintainers.
+
+| Tool | Project | Maintainers |
+|------|---------|-------------|
+| **gh** | [cli/cli](https://github.com/cli/cli) | GitHub |
+| **vault** | [hashicorp/vault](https://github.com/hashicorp/vault) | HashiCorp |
+| **terraform** | [hashicorp/terraform](https://github.com/hashicorp/terraform) | HashiCorp |
+| **helm** | [helm/helm](https://github.com/helm/helm) | The Helm Authors (CNCF) |
+| **k9s** | [derailed/k9s](https://github.com/derailed/k9s) | Fernand Galiana |
+| **kubectl** | [kubernetes/kubectl](https://github.com/kubernetes/kubectl) | The Kubernetes Authors (CNCF) |
+| **jq** | [jqlang/jq](https://github.com/jqlang/jq) | The jq community (originally Stephen Dolan) |
+| **yq** | [mikefarah/yq](https://github.com/mikefarah/yq) | Mike Farah |
+| **trivy** | [aquasecurity/trivy](https://github.com/aquasecurity/trivy) | Aqua Security |
+| **trippy** | [fujiapple852/trippy](https://github.com/fujiapple852/trippy) | FujiApple |
+
+Thank you all for making these tools available. `diegops` simply downloads and manages your binaries — the real value is in the tools themselves.
+
+---
+
 ## Development
 
 ### Prerequisites
