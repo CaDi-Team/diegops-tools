@@ -72,6 +72,7 @@ diegops version              Print version
 diegops update               Self-update to latest release
 diegops cadi                 Show the DiegOps hero screen
 diegops help                 Show help
+diegops bootstrap            Full workstation setup in one shot
 
 diegops repo ...             Manage git repository workspace
 diegops vault ...            Pull Vault secrets into .env files
@@ -84,6 +85,29 @@ diegops ktool ...            Manage and run ktool (karluiz tools)
 
 diegops <tool> <args>        Run a managed tool (gh, vault, terraform, etc.)
 ```
+
+---
+
+## `diegops bootstrap` — Full Workstation Setup
+
+Set up a fresh workstation with a single command. Verifies authentication, pulls cloud config, clones repositories, injects secrets, and restores workstation files.
+
+```
+diegops bootstrap
+```
+
+**What it does (in order):**
+
+1. Checks GitHub CLI is authenticated
+2. Checks Vault CLI is authenticated
+3. Pulls config files from cloud (`sync pull`)
+4. Clones all configured repositories (`repo apply`)
+5. Injects `.env` secrets from Vault (`vault apply`)
+6. Restores workstation files from Vault (`secrets pull`)
+
+Finishes with the hero banner and a per-step summary. If any execution step fails, it continues with the remaining steps and reports all failures at the end.
+
+**Requires:** GitHub token (`diegops auth gh login` first) and Vault session (`vault login` first).
 
 ---
 
@@ -316,7 +340,8 @@ Displays the DiegOps hero screen with ASCII art branding. No arguments, no side 
 ├── bin/                 # Managed tool binaries (ktool, gh, jq, etc.)
 ├── tokens/              # Auth tokens (gh.json) — 0600 permissions
 ├── repos.yaml           # Repository workspace config
-└── repo-vault.yaml      # Vault secrets config
+├── repo-vault.yaml      # Vault secrets config
+└── secrets.yaml         # Workstation file sync config
 ```
 
 ---
