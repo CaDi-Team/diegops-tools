@@ -5,6 +5,21 @@
 
 Personal productivity CLI for humans and containers — workspace management, secret injection, cloud config sync, managed DevOps toolbox, and developer workstation setup in a single static binary.
 
+## What is diegops?
+
+`diegops` solves a simple problem: **setting up and keeping multiple workstations in sync**. Whether you're jumping between a laptop, a desktop, a WSL environment, or a fresh container, you want the same repos cloned, the same SSH keys in place, the same `.env` files injected, and the same tools available — without manual copy-paste.
+
+It does this by treating **GitHub as the source of truth for configuration** and **HashiCorp Vault as the source of truth for secrets**:
+
+- **GitHub** stores your non-sensitive config files (repo lists, tool preferences, workspace layouts) in a private repo that `diegops sync` manages automatically. It also provides the API token that powers tool downloads and authenticated operations.
+- **Vault** stores your sensitive files (SSH keys, kubeconfigs, `.env` secrets) as base64-encoded KV entries. `diegops secrets` and `diegops vault` read and write these entries so your secrets travel with you securely — never in git, never in plaintext on disk longer than needed.
+
+On top of that, `diegops` bundles a **managed toolbox** (`diegops tool`) that downloads and updates common DevOps CLIs (gh, vault, terraform, helm, kubectl, jq, yq, k9s, trivy, trippy) so you don't need `brew`, `apt`, or manual downloads.
+
+The end result: run `diegops bootstrap` on a fresh machine and walk away with a fully configured workstation.
+
+---
+
 ### Prerequisites
 
 `diegops` currently depends on two external CLIs for most of its functionality:
