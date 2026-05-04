@@ -50,6 +50,7 @@ diegops bootstrap               # you're ready
 | macOS | Apple Silicon | `aarch64-apple-darwin` |
 | macOS | Intel | `x86_64-apple-darwin` |
 | Ubuntu / Debian | x86_64 | `x86_64-unknown-linux-gnu` |
+| Fedora / Bazzite / RHEL | x86_64 | `x86_64-unknown-linux-gnu` |
 | Alpine (containers) | x86_64 | `x86_64-unknown-linux-musl` |
 | Alpine (containers) | ARM64 | `aarch64-unknown-linux-musl` |
 | Windows (WSL / native) | x86_64 | `x86_64-pc-windows-gnu` |
@@ -65,8 +66,18 @@ Download the binary for your platform from the [latest release](../../releases/l
 ```sh
 VERSION=$(curl -fsSL https://api.github.com/repos/CaDi-Team/diegops-tools/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
 TARGET=aarch64-apple-darwin   # see platform table above
+                               # Linux (Ubuntu/Fedora/Bazzite): x86_64-unknown-linux-gnu
 
 curl -fsSL "https://github.com/CaDi-Team/diegops-tools/releases/download/${VERSION}/diegops-${VERSION}-${TARGET}.tar.gz" \
+  | tar -xz
+sudo mv diegops /usr/local/bin/diegops
+```
+
+### Fedora / Bazzite
+
+```sh
+VERSION=$(curl -fsSL https://api.github.com/repos/CaDi-Team/diegops-tools/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
+curl -fsSL "https://github.com/CaDi-Team/diegops-tools/releases/download/${VERSION}/diegops-${VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
   | tar -xz
 sudo mv diegops /usr/local/bin/diegops
 ```
@@ -345,7 +356,7 @@ diegops shell init       Install zsh, oh-my-zsh, plugins, and write managed conf
 
 **What it does (in order):**
 
-1. Installs zsh if missing (detects apt, brew, dnf, apk)
+1. Installs zsh if missing (detects apt, brew, rpm-ostree, dnf, apk)
 2. Sets zsh as the default shell
 3. Installs oh-my-zsh if missing
 4. Clones custom plugins (zsh-autosuggestions, zsh-syntax-highlighting)

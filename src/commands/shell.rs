@@ -129,6 +129,20 @@ fn ensure_zsh() -> Result<(), Box<dyn std::error::Error>> {
         run_cmd("sudo", &["apt-get", "install", "-y", "zsh"])?;
     } else if command_exists("brew") {
         run_cmd("brew", &["install", "zsh"])?;
+    } else if command_exists("rpm-ostree") {
+        // Immutable Fedora (Bazzite, Silverblue, Kinoite): rpm-ostree layers packages
+        // atomically on top of the read-only base image. --idempotent skips if already
+        // installed; --apply-live applies the change to the running system without reboot.
+        run_cmd(
+            "sudo",
+            &[
+                "rpm-ostree",
+                "install",
+                "--idempotent",
+                "--apply-live",
+                "zsh",
+            ],
+        )?;
     } else if command_exists("dnf") {
         run_cmd("sudo", &["dnf", "install", "-y", "zsh"])?;
     } else if command_exists("apk") {
