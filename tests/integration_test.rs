@@ -443,3 +443,137 @@ fn shell_init_help_exits_successfully() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("zsh"), "help should mention zsh: {stdout}");
 }
+
+#[test]
+fn secrets_update_help_exits_successfully() {
+    let output = diegops()
+        .args(["secrets", "update", "--help"])
+        .output()
+        .expect("failed to run diegops secrets update --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("CLAUDE.md") || stdout.contains("repos"),
+        "help should mention CLAUDE.md or repos: {stdout}"
+    );
+}
+
+#[test]
+fn secrets_update_adds_agent_file_to_secrets_config() {
+    use std::fs;
+
+    let tmp = std::env::temp_dir().join(format!(
+        "diegops-test-secrets-update-{}",
+        std::process::id()
+    ));
+    let _ = fs::remove_dir_all(&tmp);
+    fs::create_dir_all(&tmp).unwrap();
+
+    // Create a project folder with a CLAUDE.md in it.
+    let project_dir = tmp.join("github").join("org").join("group");
+    fs::create_dir_all(&project_dir).unwrap();
+    fs::write(project_dir.join("CLAUDE.md"), "# Project instructions").unwrap();
+
+    // Write a repos.yaml pointing at the project folder.
+    let repos_config = tmp.join("repos.yaml");
+    fs::write(
+        &repos_config,
+        format!(
+            "targets:\n  - path: {}\n    repos: []\n",
+            project_dir.display()
+        ),
+    )
+    .unwrap();
+
+    let secrets_config = tmp.join("secrets.yaml");
+
+    let output = diegops()
+        .args([
+            "secrets",
+            "update",
+            "--repos-config",
+            repos_config.to_str().unwrap(),
+            "--config",
+            secrets_config.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run diegops secrets update");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "expected success\nstdout: {stdout}\nstderr: {stderr}"
+    );
+
+    // secrets.yaml must exist and contain the CLAUDE.md entry.
+    assert!(secrets_config.exists(), "secrets.yaml was not created");
+    let content = fs::read_to_string(&secrets_config).unwrap();
+    assert!(
+        content.contains("CLAUDE.md"),
+        "CLAUDE.md not added to secrets.yaml\ncontent: {content}"
+    );
+    assert!(
+        content.contains("secret/workstation/agents/"),
+        "vault_path not added\ncontent: {content}"
+    );
+
+    let _ = fs::remove_dir_all(&tmp);
+}
+
+#[test]
+fn secrets_update_is_idempotent() {
+    use std::fs;
+
+    let tmp = std::env::temp_dir().join(format!(
+        "diegops-test-secrets-update-idem-{}",
+        std::process::id()
+    ));
+    let _ = fs::remove_dir_all(&tmp);
+    fs::create_dir_all(&tmp).unwrap();
+
+    let project_dir = tmp.join("github").join("org").join("group");
+    fs::create_dir_all(&project_dir).unwrap();
+    fs::write(project_dir.join("CLAUDE.md"), "# instructions").unwrap();
+
+    let repos_config = tmp.join("repos.yaml");
+    fs::write(
+        &repos_config,
+        format!(
+            "targets:\n  - path: {}\n    repos: []\n",
+            project_dir.display()
+        ),
+    )
+    .unwrap();
+
+    let secrets_config = tmp.join("secrets.yaml");
+    let args = [
+        "secrets",
+        "update",
+        "--repos-config",
+        repos_config.to_str().unwrap(),
+        "--config",
+        secrets_config.to_str().unwrap(),
+    ];
+
+    // First run — should add the entry.
+    let out1 = diegops().args(args).output().expect("first run failed");
+    assert!(out1.status.success());
+
+    let content_after_first = fs::read_to_string(&secrets_config).unwrap();
+    let count_first = content_after_first.matches("CLAUDE.md").count();
+
+    // Second run — must be idempotent (no duplicate entry added).
+    let out2 = diegops().args(args).output().expect("second run failed");
+    assert!(out2.status.success());
+
+    let content_after_second = fs::read_to_string(&secrets_config).unwrap();
+    let count_second = content_after_second.matches("CLAUDE.md").count();
+    assert_eq!(
+        count_first, count_second,
+        "second run added a duplicate CLAUDE.md entry"
+    );
+
+    let _ = fs::remove_dir_all(&tmp);
+}

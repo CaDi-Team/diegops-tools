@@ -287,6 +287,25 @@ targets:
 ";
 
 // ---------------------------------------------------------------------------
+// Public helpers used by other commands
+// ---------------------------------------------------------------------------
+
+/// Returns all expanded target paths from the repos config.
+///
+/// Used by `diegops secrets update` to discover project root directories
+/// without exposing the internal config structures.
+pub fn target_paths(
+    config_path: Option<&Path>,
+) -> Result<Vec<std::path::PathBuf>, Box<dyn std::error::Error>> {
+    let config = load_config(config_path)?;
+    Ok(config
+        .targets
+        .iter()
+        .map(|t| super::common::expand_home(&t.path))
+        .collect())
+}
+
+// ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 

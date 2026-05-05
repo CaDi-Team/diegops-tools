@@ -270,6 +270,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 SecretsCommand::Init => {
                     commands::secrets::init(None)?;
                 }
+                SecretsCommand::Update {
+                    repos_config,
+                    config,
+                } => {
+                    let repos_cfg = repos_config.as_deref().map(std::path::Path::new);
+                    let secrets_cfg = config.as_deref().map(std::path::Path::new);
+                    commands::secrets::update(secrets_cfg, repos_cfg)?;
+                }
             }
         }
         Some(Commands::Auth { cmd }) => match cmd {

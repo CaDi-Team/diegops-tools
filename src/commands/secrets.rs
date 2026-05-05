@@ -64,6 +64,21 @@ pub enum SecretsCommand {
     ///
     /// Does nothing if the file already exists (idempotent).
     Init,
+
+    /// Scan repo target paths for CLAUDE.md / AGENTS.md and register them for backup.
+    ///
+    /// Reads repos.yaml, walks every target path, and adds any CLAUDE.md or
+    /// AGENTS.md found there to secrets.yaml. Files already tracked are skipped.
+    /// Run `diegops secrets push` afterwards to upload them to Vault.
+    Update {
+        /// Path to the repos.yaml config file.
+        #[arg(long)]
+        repos_config: Option<String>,
+
+        /// Path to the secrets.yaml config file.
+        #[arg(long)]
+        config: Option<String>,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -872,6 +887,238 @@ pub fn status(config_path: Option<&Path>) -> Result<(), Box<dyn std::error::Erro
             }
         }
     }
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// secrets update — agent file discovery
+// ---------------------------------------------------------------------------
+
+/// Scans all repo target paths from `repos.yaml` for `CLAUDE.md` and
+/// `AGENTS.md`, then registers any untracked files in `secrets.yaml` so they
+/// are included on the next `diegops secrets push`.
+///
+/// The parent folder of a group of repos (e.g. `$HOME/github/org/group/`) is
+/// not itself a git repository, so project-level agent files placed there
+/// cannot be committed. This command bridges that gap by syncing them through
+/// Vault.
+///
+/// Idempotent: files already present in `secrets.yaml` are skipped.
+pub fn update(
+    secrets_config_path: Option<&std::path::Path>,
+    repos_config_path: Option<&std::path::Path>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use std::collections::BTreeMap;
+
+    // Load repos config — required; fail clearly if missing.
+    let target_paths = super::repo::target_paths(repos_config_path)?;
+
+    if target_paths.is_empty() {
+        println!("No targets found in repos.yaml. Nothing to scan.");
+        return Ok(());
+    }
+
+    // Scan every target path for agent instruction files.
+    const AGENT_FILES: &[&str] = &["CLAUDE.md", "AGENTS.md"];
+    let mut found: Vec<(std::path::PathBuf, &str)> = Vec::new();
+    for path in &target_paths {
+        for &filename in AGENT_FILES {
+            if path.join(filename).is_file() {
+                found.push((path.clone(), filename));
+            }
+        }
+    }
+
+    if found.is_empty() {
+        println!("No CLAUDE.md or AGENTS.md found in any repo target path.");
+        return Ok(());
+    }
+
+    // Load existing secrets config (tolerates missing file — nothing is tracked yet).
+    let existing = try_load_secrets_config(secrets_config_path)?;
+
+    // Resolve the path we will write to (create parent dirs if needed).
+    let secrets_path = super::common::resolve_config_path(
+        secrets_config_path,
+        "DIEGOPS_SECRETS_CONFIG",
+        "secrets.yaml",
+    )?;
+
+    // Partition found files into already-tracked vs new.
+    // Group new entries by dest path so one stanza covers both CLAUDE.md +
+    // AGENTS.md when both exist at the same location.
+    let mut to_add: BTreeMap<std::path::PathBuf, Vec<&str>> = BTreeMap::new();
+    let mut n_skipped: usize = 0;
+
+    for (dest_path, filename) in &found {
+        if is_agent_file_tracked(existing.as_ref(), dest_path, filename) {
+            eprintln!(
+                "  SKIP  {}/{filename} (already tracked)",
+                contract_home(dest_path)
+            );
+            n_skipped += 1;
+        } else {
+            to_add.entry(dest_path.clone()).or_default().push(filename);
+        }
+    }
+
+    if to_add.is_empty() {
+        println!("\nAll agent files already tracked ({n_skipped} skipped). Nothing to add.");
+        return Ok(());
+    }
+
+    // Build YAML stanzas for the new entries.
+    let mut new_yaml_entries: Vec<String> = Vec::new();
+
+    for (dest_path, filenames) in &to_add {
+        let dest_str = contract_home(dest_path);
+        let vault_path = agent_vault_path(dest_path);
+
+        let mut keys_yaml = String::new();
+        for filename in filenames {
+            keys_yaml.push_str(&format!(
+                "      - name: {filename}\n        mode: \"0644\"\n"
+            ));
+        }
+
+        eprintln!(
+            "  ADD   {dest_str}  ({})  →  {vault_path}",
+            filenames.join(", ")
+        );
+
+        new_yaml_entries.push(format!(
+            "\n  # Agent file registered by `diegops secrets update`\n  - dest: {dest_str}\n    vault_path: {vault_path}\n    keys:\n{keys_yaml}"
+        ));
+    }
+
+    append_to_secrets_config(&secrets_path, &new_yaml_entries)?;
+
+    let n_added = to_add.len();
+    println!(
+        "\nAdded {n_added} entr{}. Run `diegops secrets push` to back them up to Vault.",
+        if n_added == 1 { "y" } else { "ies" }
+    );
+    if n_skipped > 0 {
+        eprintln!("{n_skipped} file(s) were already tracked and skipped.");
+    }
+
+    Ok(())
+}
+
+/// Loads the secrets config without failing if the file does not exist yet.
+fn try_load_secrets_config(
+    path: Option<&std::path::Path>,
+) -> Result<Option<SecretsConfig>, Box<dyn std::error::Error>> {
+    let config_path =
+        super::common::resolve_config_path(path, "DIEGOPS_SECRETS_CONFIG", "secrets.yaml")?;
+    if !config_path.exists() {
+        return Ok(None);
+    }
+    let content = super::common::read_config_file(&config_path)?;
+    let config: SecretsConfig = serde_yaml::from_str(&content)
+        .map_err(|e| format!("invalid secrets config {}: {e}", config_path.display()))?;
+    Ok(Some(config))
+}
+
+/// Returns `true` if `filename` at `dest` is already covered by a secrets entry.
+///
+/// A file is considered tracked when a folder entry matches the dest **and**
+/// either lists the filename explicitly or uses the `"*"` wildcard.
+fn is_agent_file_tracked(
+    config: Option<&SecretsConfig>,
+    dest: &std::path::Path,
+    filename: &str,
+) -> bool {
+    let Some(config) = config else {
+        return false;
+    };
+    for folder in &config.folders {
+        let folder_dest = super::common::expand_home(&folder.dest);
+        if folder_dest != dest {
+            continue;
+        }
+        match &folder.keys {
+            KeySelector::All(s) if s == "*" => return true,
+            KeySelector::List(entries) => {
+                if entries.iter().any(|e| e.name() == filename) {
+                    return true;
+                }
+            }
+            _ => {}
+        }
+    }
+    false
+}
+
+/// Derives a deterministic Vault KV path from a local filesystem path.
+///
+/// `$HOME/github/org/group` → `secret/workstation/agents/github/org/group`
+fn agent_vault_path(local_path: &std::path::Path) -> String {
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .map(std::path::PathBuf::from)
+        .unwrap_or_default();
+
+    let relative = local_path.strip_prefix(&home).unwrap_or(local_path);
+    let slug = relative
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+        .collect::<Vec<_>>()
+        .join("/");
+    format!("secret/workstation/agents/{slug}")
+}
+
+/// Converts an absolute path to a `$HOME`-relative display string.
+///
+/// `"/Users/alice/github/org"` → `"$HOME/github/org"`. Falls back to the
+/// absolute path string if the home prefix cannot be stripped.
+fn contract_home(path: &std::path::Path) -> String {
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .map(std::path::PathBuf::from)
+        .unwrap_or_default();
+
+    match path.strip_prefix(&home) {
+        Ok(rel) => {
+            let rel_str = rel.to_string_lossy();
+            if rel_str.is_empty() {
+                "$HOME".to_string()
+            } else {
+                format!("$HOME/{rel_str}")
+            }
+        }
+        Err(_) => path.to_string_lossy().into_owned(),
+    }
+}
+
+/// Appends YAML list stanzas to the secrets config file.
+///
+/// Creates the file with a bare `folders:` header if it does not exist yet.
+/// Ensures the file ends with a newline before appending.
+fn append_to_secrets_config(
+    config_path: &std::path::Path,
+    entries: &[String],
+) -> Result<(), Box<dyn std::error::Error>> {
+    if !config_path.exists() {
+        if let Some(parent) = config_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(config_path, "folders:\n")?;
+    }
+
+    let mut content = fs::read_to_string(config_path)
+        .map_err(|e| format!("could not read {}: {e}", config_path.display()))?;
+
+    if !content.ends_with('\n') {
+        content.push('\n');
+    }
+    for entry in entries {
+        content.push_str(entry);
+    }
+
+    fs::write(config_path, &content)
+        .map_err(|e| format!("could not write {}: {e}", config_path.display()))?;
 
     Ok(())
 }
