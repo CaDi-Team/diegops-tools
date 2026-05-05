@@ -314,18 +314,51 @@ fn which(cmd: &str) -> Option<String> {
     })
 }
 
-/// Runs a command, returning an error if it fails.
+/// Runs a command, capturing stderr for error reporting.
+///
+/// On success the command's output is suppressed (progress messages are handled
+/// by the caller via `eprintln!`). On failure a structured error is returned
+/// containing the full command line, exit code, and any captured stderr so the
+/// user has enough information to debug or report the issue.
 fn run_cmd(program: &str, args: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
-    let status = Command::new(program)
+    let output = Command::new(program)
         .args(args)
         .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .map_err(|e| format!("failed to run {program}: {e}"))?;
+        .stderr(std::process::Stdio::piped())
+        .output()
+        .map_err(|e| format!("failed to spawn `{program}`: {e}"))?;
 
-    if status.success() {
-        Ok(())
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let full_cmd = std::iter::once(program)
+        .chain(args.iter().copied())
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    let code = output
+        .status
+        .code()
+        .map(|c| c.to_string())
+        .unwrap_or_else(|| "killed by signal".to_string());
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stderr = stderr.trim();
+
+    if stderr.is_empty() {
+        Err(format!(
+            "`{full_cmd}` failed (exit code {code})\n\
+             No output was captured. Try running the command manually for details."
+        )
+        .into())
     } else {
-        Err(format!("{program} exited with {status}").into())
+        // Indent each line of stderr for readable, copy-pasteable output.
+        let indented = stderr
+            .lines()
+            .map(|l| format!("  {l}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        Err(format!("`{full_cmd}` failed (exit code {code})\n{indented}").into())
     }
 }
