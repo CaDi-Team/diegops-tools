@@ -1,0 +1,16 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: diegops-tools
+  description: Rust-based personal developer CLI tools (diegops) — internal utilities for CaDi Labs engineering workflows
+  annotations:
+    github.com/project-slug: CaDi-Team/diegops-tools
+  tags:
+    - rust
+    - cli
+    - devtools
+spec:
+  type: tool
+  lifecycle: production
+  owner: cadi-labs
+  system: cadi-developer-platform
