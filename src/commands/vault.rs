@@ -21,7 +21,6 @@
 use serde::Deserialize;
 use std::fs;
 use std::path::Path;
-use std::process::Command;
 
 // ---------------------------------------------------------------------------
 // Clap sub-command definitions
@@ -166,7 +165,7 @@ pub fn apply(
         let mut target_failed = false;
 
         for entry in &target.secrets {
-            match vault_kv_get(&entry.vault_path) {
+            match super::common::vault_kv_get(&entry.vault_path) {
                 Ok(data) => match &entry.keys {
                     KeySelector::All(s) if s == "*" => {
                         for (k, v) in &data {
@@ -218,35 +217,31 @@ pub fn apply(
             continue;
         }
 
-        // Build .env content and check if it changed
+        // Build .env content and write it (backing up an existing, differing
+        // file first — matches secrets.rs's write_file_with_backup behavior).
         let env_content = build_env_content(&all_secrets);
-        let env_path = dest.join(".env");
-
-        if env_path.exists() {
-            if let Ok(existing) = fs::read_to_string(&env_path) {
-                if existing == env_content {
+        match write_env_file(&dest, &env_content) {
+            Ok((written, backed_up)) => {
+                if !written {
                     eprintln!("  SKIP  .env unchanged");
                     n_skipped += 1;
-                    continue;
+                } else if backed_up {
+                    eprintln!(
+                        "  WRITE .env ({} secrets, backup created)",
+                        all_secrets.len()
+                    );
+                    n_written += 1;
+                } else {
+                    eprintln!("  WRITE .env ({} secrets)", all_secrets.len());
+                    n_written += 1;
                 }
             }
+            Err(e) => {
+                eprintln!("  FAIL  could not write .env: {e}");
+                failures.push(target.path.clone());
+                continue;
+            }
         }
-
-        // Write .env
-        fs::write(&env_path, &env_content)?;
-
-        // Set file permissions to 0600 on Unix
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&env_path, fs::Permissions::from_mode(0o600))?;
-        }
-
-        // Update .gitignore
-        ensure_gitignore(&dest)?;
-
-        eprintln!("  WRITE .env ({} secrets)", all_secrets.len());
-        n_written += 1;
     }
 
     eprintln!();
@@ -401,52 +396,30 @@ fn format_env_line(key: &str, value: &str) -> String {
     format!("{key}=\"{escaped}\"")
 }
 
-/// Fetches all key-value pairs from a Vault KV v2 path.
+/// Writes `env_content` to `dest/.env`, backing up an existing file first if
+/// its content differs. Sets `0600` permissions and ensures `.env` is
+/// gitignored — but only when something was actually written.
 ///
-/// Returns a map of key → value. On error, returns a user-friendly message.
-fn vault_kv_get(
-    vault_path: &str,
-) -> Result<serde_json::Map<String, serde_json::Value>, Box<dyn std::error::Error>> {
-    let output = Command::new("vault")
-        .args(["kv", "get", "-format=json", vault_path])
-        .output()
-        .map_err(|e| format!("could not run vault: {e}"))?;
+/// Returns `(written, backed_up)`.
+fn write_env_file(
+    dest: &Path,
+    env_content: &str,
+) -> Result<(bool, bool), Box<dyn std::error::Error>> {
+    let env_path = dest.join(".env");
+    let file_existed = env_path.exists();
+    let backed_up = super::common::write_file_with_backup(&env_path, env_content.as_bytes())?;
+    let written = backed_up || !file_existed;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stderr = stderr.trim();
-        if stderr.contains("permission denied") || stderr.contains("403") {
-            return Err(
-                format!("access denied for '{vault_path}'. Check your Vault policies").into(),
-            );
+    if written {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&env_path, fs::Permissions::from_mode(0o600))?;
         }
-        if stderr.contains("no secrets") || stderr.contains("Not Found") || stderr.contains("404") {
-            return Err(format!(
-                "secret not found at '{vault_path}'. Verify the path exists in Vault"
-            )
-            .into());
-        }
-        return Err(format!("vault kv get failed for '{vault_path}': {stderr}").into());
+        ensure_gitignore(dest)?;
     }
 
-    parse_vault_response(&output.stdout, vault_path)
-}
-
-/// Parses the JSON response from `vault kv get -format=json`.
-///
-/// Extracted for testability — the JSON structure is `{ "data": { "data": { ... } } }`.
-fn parse_vault_response(
-    json_bytes: &[u8],
-    vault_path: &str,
-) -> Result<serde_json::Map<String, serde_json::Value>, Box<dyn std::error::Error>> {
-    let json: serde_json::Value = serde_json::from_slice(json_bytes)?;
-    let data = json
-        .get("data")
-        .and_then(|d| d.get("data"))
-        .and_then(|d| d.as_object())
-        .ok_or_else(|| format!("unexpected JSON structure from vault kv get for '{vault_path}'"))?;
-
-    Ok(data.clone())
+    Ok((written, backed_up))
 }
 
 #[cfg(test)]
@@ -529,31 +502,6 @@ targets:
     }
 
     #[test]
-    fn parse_vault_response_extracts_data() {
-        let json = br#"{
-            "data": {
-                "data": {
-                    "username": "admin",
-                    "password": "s3cret",
-                    "port": 5432
-                },
-                "metadata": { "version": 1 }
-            }
-        }"#;
-        let data = parse_vault_response(json, "secret/test").unwrap();
-        assert_eq!(data.get("username").unwrap().as_str().unwrap(), "admin");
-        assert_eq!(data.get("password").unwrap().as_str().unwrap(), "s3cret");
-        assert_eq!(data.get("port").unwrap().as_u64().unwrap(), 5432);
-        assert_eq!(data.len(), 3);
-    }
-
-    #[test]
-    fn parse_vault_response_rejects_bad_json() {
-        let json = br#"{"data": {"wrong": "shape"}}"#;
-        assert!(parse_vault_response(json, "secret/test").is_err());
-    }
-
-    #[test]
     fn ensure_gitignore_adds_env_entry() {
         let dir =
             std::env::temp_dir().join(format!("diegops-test-gitignore-{}", std::process::id()));
@@ -589,5 +537,70 @@ targets:
         assert!(content.starts_with("# Generated by diegops vault apply"));
         assert!(content.contains(r#"db_pass="s3cret""#));
         assert!(content.contains(r#"api_key="tok \"en""#));
+    }
+
+    #[test]
+    fn write_env_file_creates_backup_when_content_differs() {
+        let dir = std::env::temp_dir().join(format!(
+            "diegops-test-vault-env-backup-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        fs::write(dir.join(".env"), "OLD=\"value\"\n").unwrap();
+
+        let (written, backed_up) = write_env_file(&dir, "NEW=\"value\"\n").unwrap();
+        assert!(written);
+        assert!(backed_up);
+        assert_eq!(
+            fs::read_to_string(dir.join(".env.bak")).unwrap(),
+            "OLD=\"value\"\n"
+        );
+        assert_eq!(
+            fs::read_to_string(dir.join(".env")).unwrap(),
+            "NEW=\"value\"\n"
+        );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_env_file_skips_when_unchanged() {
+        let dir = std::env::temp_dir().join(format!(
+            "diegops-test-vault-env-unchanged-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        fs::write(dir.join(".env"), "SAME=\"value\"\n").unwrap();
+        let (written, backed_up) = write_env_file(&dir, "SAME=\"value\"\n").unwrap();
+
+        assert!(!written);
+        assert!(!backed_up);
+        assert!(!dir.join(".env.bak").exists());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_env_file_writes_new_file_without_backup() {
+        let dir =
+            std::env::temp_dir().join(format!("diegops-test-vault-env-new-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let (written, backed_up) = write_env_file(&dir, "FRESH=\"value\"\n").unwrap();
+
+        assert!(written);
+        assert!(!backed_up);
+        assert!(!dir.join(".env.bak").exists());
+        assert_eq!(
+            fs::read_to_string(dir.join(".env")).unwrap(),
+            "FRESH=\"value\"\n"
+        );
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }
