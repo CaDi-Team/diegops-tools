@@ -42,22 +42,10 @@ pub enum AllCommand {
 // Public entry points
 // ---------------------------------------------------------------------------
 
-/// Pulls everything needed to make a workstation usable, in dependency order.
-///
-/// GitHub and Vault auth are verified up front (fatal — returns immediately
-/// on failure, before running any step). The six sync steps that follow
-/// continue past individual failures; check the returned results for
-/// per-step outcomes.
-pub fn pull() -> Result<Vec<StepResult>, Box<dyn std::error::Error>> {
-    eprint!("Checking GitHub CLI ... ");
-    let gh_user = check_github()?;
-    eprintln!("OK ({gh_user})");
-
-    eprint!("Checking Vault CLI ... ");
-    check_vault()?;
-    eprintln!("OK");
-
-    let steps: Vec<Step> = vec![
+/// Builds the ordered step list for `pull()`. Extracted so tests can assert
+/// on step order without needing live GitHub/Vault/network access.
+fn pull_steps() -> Vec<Step> {
+    vec![
         (
             "Syncing config from cloud",
             "Config synced from cloud",
@@ -80,9 +68,37 @@ pub fn pull() -> Result<Vec<StepResult>, Box<dyn std::error::Error>> {
         ("Configuring shell", "Shell configured", || {
             super::shell::init()
         }),
-    ];
+    ]
+}
 
-    Ok(run_steps(&steps))
+/// Builds the ordered step list for `push()`.
+fn push_steps() -> Vec<Step> {
+    vec![
+        ("Pushing secret files", "Secret files pushed", || {
+            super::secrets::push(None, None)
+        }),
+        ("Pushing config to cloud", "Config pushed to cloud", || {
+            super::sync::push()
+        }),
+    ]
+}
+
+/// Pulls everything needed to make a workstation usable, in dependency order.
+///
+/// GitHub and Vault auth are verified up front (fatal — returns immediately
+/// on failure, before running any step). The six sync steps that follow
+/// continue past individual failures; check the returned results for
+/// per-step outcomes.
+pub fn pull() -> Result<Vec<StepResult>, Box<dyn std::error::Error>> {
+    eprint!("Checking GitHub CLI ... ");
+    let gh_user = check_github()?;
+    eprintln!("OK ({gh_user})");
+
+    eprint!("Checking Vault CLI ... ");
+    check_vault()?;
+    eprintln!("OK");
+
+    Ok(run_steps(&pull_steps()))
 }
 
 /// Pushes everything with a push side: personal secret files, then the
@@ -92,16 +108,7 @@ pub fn pull() -> Result<Vec<StepResult>, Box<dyn std::error::Error>> {
 /// `vault` is deliberately pull-only (team-owned namespace) — neither
 /// appears here.
 pub fn push() -> Result<Vec<StepResult>, Box<dyn std::error::Error>> {
-    let steps: Vec<Step> = vec![
-        ("Pushing secret files", "Secret files pushed", || {
-            super::secrets::push(None, None)
-        }),
-        ("Pushing config to cloud", "Config pushed to cloud", || {
-            super::sync::push()
-        }),
-    ];
-
-    Ok(run_steps(&steps))
+    Ok(run_steps(&push_steps()))
 }
 
 /// Prints an `OK`/`FAILED` summary line per step and returns the failure count.
@@ -275,5 +282,30 @@ mod tests {
         }];
         let err = finish(&results, "push").unwrap_err();
         assert!(err.to_string().contains("1 push step(s) failed"));
+    }
+
+    #[test]
+    fn pull_steps_are_in_ssh_before_clone_order() {
+        let labels: Vec<&str> = pull_steps().iter().map(|(_, label, _)| *label).collect();
+        assert_eq!(
+            labels,
+            vec![
+                "Config synced from cloud",
+                "SSH keys restored",
+                "Repositories cloned",
+                "Vault secrets injected",
+                "Workstation files restored",
+                "Shell configured",
+            ]
+        );
+    }
+
+    #[test]
+    fn push_steps_are_secrets_then_sync() {
+        let labels: Vec<&str> = push_steps().iter().map(|(_, label, _)| *label).collect();
+        assert_eq!(
+            labels,
+            vec!["Secret files pushed", "Config pushed to cloud"]
+        );
     }
 }
