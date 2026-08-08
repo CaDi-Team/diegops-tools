@@ -1,6 +1,7 @@
 mod commands;
 
 use clap::{CommandFactory, Parser, Subcommand};
+use commands::all::AllCommand;
 use commands::auth::{AuthCommand, GhCommand};
 use commands::devtools::{DevtoolsCommand, GitCommand, GpgCommand, SshCommand};
 use commands::repo::RepoCommand;
@@ -65,6 +66,16 @@ enum Commands {
             Finishes with a summary report and the hero banner.\n\
             Requires: GitHub token and Vault session.")]
     Bootstrap,
+    /// Push or pull everything: repos, secrets, vault, and cloud config
+    #[command(long_about = "Push or pull everything in one command.\n\n\
+            all pull: sync pull → SSH keys → repo apply → vault apply → secrets pull → shell init\n\
+            all push: secrets push → sync push\n\n\
+            Continues past a failed step and prints a summary at the end.\n\
+            Requires: GitHub token and Vault session (for pull).")]
+    All {
+        #[command(subcommand)]
+        cmd: AllCommand,
+    },
     /// Set up shell environment (zsh, oh-my-zsh, plugins, config)
     #[command(
         long_about = "Set up shell environment — zsh, oh-my-zsh, plugins, and config.\n\n\
@@ -198,6 +209,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(Commands::Bootstrap) => {
             commands::bootstrap::run()?;
         }
+        Some(Commands::All { cmd }) => match cmd {
+            AllCommand::Pull => {
+                let results = commands::all::pull()?;
+                commands::all::finish(&results, "pull")?;
+            }
+            AllCommand::Push => {
+                let results = commands::all::push()?;
+                commands::all::finish(&results, "push")?;
+            }
+        },
         Some(Commands::Shell { cmd }) => match cmd {
             ShellCommand::Init => {
                 commands::shell::init()?;
