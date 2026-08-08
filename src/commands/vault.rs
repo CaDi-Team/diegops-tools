@@ -356,26 +356,37 @@ targets:
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-/// Ensures `.env` is listed in the target directory's `.gitignore`.
+/// Ensures `.env` and `.env.bak` are both listed in the target directory's
+/// `.gitignore`. `.env.bak` is needed because `write_env_file` may create one
+/// when overwriting a changed `.env`.
 fn ensure_gitignore(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let gitignore = dir.join(".gitignore");
+    const REQUIRED: [&str; 2] = [".env", ".env.bak"];
 
-    if gitignore.exists() {
-        let content = fs::read_to_string(&gitignore)?;
-        // Exact line match
-        if content.lines().any(|line| line.trim() == ".env") {
-            return Ok(());
-        }
-        // Ensure preceding newline
-        let prefix = if content.ends_with('\n') || content.is_empty() {
-            ""
-        } else {
-            "\n"
-        };
-        fs::write(&gitignore, format!("{content}{prefix}.env\n"))?;
+    let content = if gitignore.exists() {
+        fs::read_to_string(&gitignore)?
     } else {
-        fs::write(&gitignore, ".env\n")?;
+        String::new()
+    };
+
+    let existing: Vec<&str> = content.lines().map(str::trim).collect();
+    let missing: Vec<&str> = REQUIRED
+        .iter()
+        .copied()
+        .filter(|pattern| !existing.contains(pattern))
+        .collect();
+
+    if missing.is_empty() {
+        return Ok(());
     }
+
+    let prefix = if content.is_empty() || content.ends_with('\n') {
+        ""
+    } else {
+        "\n"
+    };
+    let addition: String = missing.iter().map(|p| format!("{p}\n")).collect();
+    fs::write(&gitignore, format!("{content}{prefix}{addition}"))?;
 
     Ok(())
 }
@@ -502,27 +513,63 @@ targets:
     }
 
     #[test]
-    fn ensure_gitignore_adds_env_entry() {
+    fn ensure_gitignore_adds_env_and_env_bak_entries() {
         let dir =
             std::env::temp_dir().join(format!("diegops-test-gitignore-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
 
-        // No .gitignore exists — should create one
+        // No .gitignore exists — should create one with both entries
         ensure_gitignore(&dir).unwrap();
         let content = fs::read_to_string(dir.join(".gitignore")).unwrap();
-        assert!(content.contains(".env"));
+        assert!(content.lines().any(|l| l.trim() == ".env"));
+        assert!(content.lines().any(|l| l.trim() == ".env.bak"));
 
         // Already present — should not duplicate
         ensure_gitignore(&dir).unwrap();
         let content = fs::read_to_string(dir.join(".gitignore")).unwrap();
-        assert_eq!(content.matches(".env").count(), 1);
+        assert_eq!(content.lines().filter(|l| l.trim() == ".env").count(), 1);
+        assert_eq!(
+            content.lines().filter(|l| l.trim() == ".env.bak").count(),
+            1
+        );
 
-        // .gitignore without trailing newline
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn ensure_gitignore_migrates_existing_env_only_entry() {
+        let dir = std::env::temp_dir().join(format!(
+            "diegops-test-gitignore-migrate-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        // Simulates a repo that already ran an older `vault apply` before this fix.
+        fs::write(dir.join(".gitignore"), ".env\n").unwrap();
+        ensure_gitignore(&dir).unwrap();
+        let content = fs::read_to_string(dir.join(".gitignore")).unwrap();
+        assert!(content.lines().any(|l| l.trim() == ".env"));
+        assert!(content.lines().any(|l| l.trim() == ".env.bak"));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn ensure_gitignore_handles_missing_trailing_newline() {
+        let dir = std::env::temp_dir().join(format!(
+            "diegops-test-gitignore-newline-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
         fs::write(dir.join(".gitignore"), "node_modules").unwrap();
         ensure_gitignore(&dir).unwrap();
         let content = fs::read_to_string(dir.join(".gitignore")).unwrap();
-        assert!(content.contains("node_modules\n.env"));
+        assert!(content.starts_with("node_modules\n.env"));
+        assert!(content.lines().any(|l| l.trim() == ".env.bak"));
 
         let _ = fs::remove_dir_all(&dir);
     }
