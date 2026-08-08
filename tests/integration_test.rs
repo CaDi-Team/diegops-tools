@@ -418,6 +418,39 @@ fn secrets_status_help_exits_successfully() {
 }
 
 #[test]
+fn all_help_exits_successfully() {
+    let output = diegops()
+        .args(["all", "--help"])
+        .output()
+        .expect("failed to run diegops all --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("pull"), "got: {stdout}");
+    assert!(stdout.contains("push"), "got: {stdout}");
+}
+
+#[test]
+fn all_pull_help_exits_successfully() {
+    let output = diegops()
+        .args(["all", "pull", "--help"])
+        .output()
+        .expect("failed to run diegops all pull --help");
+
+    assert!(output.status.success());
+}
+
+#[test]
+fn all_push_help_exits_successfully() {
+    let output = diegops()
+        .args(["all", "push", "--help"])
+        .output()
+        .expect("failed to run diegops all push --help");
+
+    assert!(output.status.success());
+}
+
+#[test]
 fn bootstrap_help_exits_successfully() {
     let output = diegops()
         .args(["bootstrap", "--help"])
@@ -426,10 +459,7 @@ fn bootstrap_help_exits_successfully() {
 
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(
-        stdout.contains("Bootstrap"),
-        "help should mention Bootstrap: {stdout}"
-    );
+    assert!(stdout.contains("all pull"), "got: {stdout}");
 }
 
 #[test]
