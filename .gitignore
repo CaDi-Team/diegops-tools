@@ -18,3 +18,6 @@ dist/
 
 # Internal design docs (superpowers workflow artifacts)
 docs/superpowers/
+
+# Git worktrees (superpowers workflow isolation)
+.worktrees/
