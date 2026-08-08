@@ -128,6 +128,88 @@ pub fn check_vault_auth() -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Vault KV helpers (shared by secrets.rs and vault.rs)
+// ---------------------------------------------------------------------------
+
+/// Fetches all key-value pairs from a Vault KV v2 path.
+///
+/// Returns a map of key → value. On error, returns a user-friendly message.
+pub fn vault_kv_get(
+    vault_path: &str,
+) -> Result<serde_json::Map<String, serde_json::Value>, Box<dyn std::error::Error>> {
+    use std::process::Command;
+    let output = Command::new("vault")
+        .args(["kv", "get", "-format=json", vault_path])
+        .output()
+        .map_err(|e| format!("could not run vault: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stderr = stderr.trim();
+        if stderr.contains("permission denied") || stderr.contains("403") {
+            return Err(
+                format!("access denied for '{vault_path}'. Check your Vault policies").into(),
+            );
+        }
+        if stderr.contains("no secrets") || stderr.contains("Not Found") || stderr.contains("404") {
+            return Err(format!(
+                "secret not found at '{vault_path}'. Verify the path exists in Vault"
+            )
+            .into());
+        }
+        return Err(format!("vault kv get failed for '{vault_path}': {stderr}").into());
+    }
+
+    parse_vault_kv_response(&output.stdout, vault_path)
+}
+
+/// Parses the JSON response from `vault kv get -format=json`.
+///
+/// Extracted for testability — the JSON structure is `{ "data": { "data": { ... } } }`.
+fn parse_vault_kv_response(
+    json_bytes: &[u8],
+    vault_path: &str,
+) -> Result<serde_json::Map<String, serde_json::Value>, Box<dyn std::error::Error>> {
+    let json: serde_json::Value = serde_json::from_slice(json_bytes)?;
+    let data = json
+        .get("data")
+        .and_then(|d| d.get("data"))
+        .and_then(|d| d.as_object())
+        .ok_or_else(|| format!("unexpected JSON structure from vault kv get for '{vault_path}'"))?;
+
+    Ok(data.clone())
+}
+
+/// Writes `content` to `path`, creating a `.bak` backup if the file already
+/// exists and its content differs.
+///
+/// Returns `true` if a backup was created (i.e. the file existed and differed),
+/// `false` otherwise (new file, or content identical).
+pub fn write_file_with_backup(
+    path: &Path,
+    content: &[u8],
+) -> Result<bool, Box<dyn std::error::Error>> {
+    if path.exists() {
+        let existing = fs::read(path)?;
+        if existing == content {
+            return Ok(false);
+        }
+        // Content differs — back up before overwriting
+        let bak = path.with_extension(
+            path.extension()
+                .map(|e| format!("{}.bak", e.to_string_lossy()))
+                .unwrap_or_else(|| "bak".to_string()),
+        );
+        fs::copy(path, &bak)?;
+        fs::write(path, content)?;
+        return Ok(true);
+    }
+    // New file
+    fs::write(path, content)?;
+    Ok(false)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -206,5 +288,111 @@ mod tests {
         let result = resolve_config_path(None, key, "default.yaml").expect("should succeed");
         std::env::remove_var(key);
         assert_eq!(result, PathBuf::from("/from/env.yaml"));
+    }
+
+    // -----------------------------------------------------------------------
+    // parse_vault_kv_response
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn parse_vault_kv_response_extracts_data() {
+        let json = br#"{
+            "data": {
+                "data": {
+                    "database.env": "aGVsbG8=",
+                    "api.env": "d29ybGQ="
+                },
+                "metadata": { "version": 1 }
+            }
+        }"#;
+        let data = parse_vault_kv_response(json, "secret/test").unwrap();
+        assert_eq!(
+            data.get("database.env").unwrap().as_str().unwrap(),
+            "aGVsbG8="
+        );
+        assert_eq!(data.get("api.env").unwrap().as_str().unwrap(), "d29ybGQ=");
+        assert_eq!(data.len(), 2);
+    }
+
+    #[test]
+    fn parse_vault_kv_response_rejects_missing_data_data() {
+        let json = br#"{"data": {"wrong": "shape"}}"#;
+        assert!(parse_vault_kv_response(json, "secret/test").is_err());
+    }
+
+    #[test]
+    fn parse_vault_kv_response_rejects_bad_json() {
+        assert!(parse_vault_kv_response(b"not json", "secret/test").is_err());
+    }
+
+    // -----------------------------------------------------------------------
+    // write_file_with_backup
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn write_file_with_backup_new_file_no_backup() {
+        let dir = std::env::temp_dir().join(format!(
+            "diegops-test-common-backup-new-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let path = dir.join("secret.env");
+        let backed_up = write_file_with_backup(&path, b"content").unwrap();
+
+        assert!(!backed_up);
+        assert_eq!(fs::read(&path).unwrap(), b"content");
+        assert!(!dir.join("secret.env.bak").exists());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_file_with_backup_same_content_no_backup() {
+        let dir = std::env::temp_dir().join(format!(
+            "diegops-test-common-backup-same-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let path = dir.join("secret.env");
+        fs::write(&path, b"same content").unwrap();
+
+        let backed_up = write_file_with_backup(&path, b"same content").unwrap();
+
+        assert!(!backed_up);
+        assert_eq!(fs::read(&path).unwrap(), b"same content");
+        assert!(!dir.join("secret.env.bak").exists());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_file_with_backup_different_content_creates_backup() {
+        let dir = std::env::temp_dir().join(format!(
+            "diegops-test-common-backup-diff-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let path = dir.join("secret.env");
+        fs::write(&path, b"old content").unwrap();
+
+        let backed_up = write_file_with_backup(&path, b"new content").unwrap();
+
+        assert!(backed_up);
+        assert_eq!(fs::read(&path).unwrap(), b"new content");
+        let bak_path = dir.join("secret.env.bak");
+        assert!(
+            bak_path.exists(),
+            "backup file should exist at {}",
+            bak_path.display()
+        );
+        assert_eq!(fs::read(&bak_path).unwrap(), b"old content");
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }
