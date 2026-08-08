@@ -111,7 +111,9 @@ cargo test
 | `diegops version` | Print version string |
 | `diegops update` | Self-update from GitHub Releases |
 | `diegops cadi` | Show the DiegOps hero screen |
-| `diegops bootstrap` | Full workstation setup in one shot |
+| `diegops bootstrap` | Bootstrap a fresh workstation — delegates to 'diegops all pull' |
+| `diegops all pull [--help]` | Pull everything: config, SSH keys, repos, vault secrets, workstation files, shell |
+| `diegops all push [--help]` | Push everything: secret files, then the `~/.diegops` config |
 | `diegops shell init` | Set up zsh, oh-my-zsh, plugins, and managed config |
 | `diegops repo init` | Create sample config at `~/.diegops/repos.yaml` |
 | `diegops repo apply [--path P] [--config F]` | Clone all missing repos (idempotent) |
@@ -190,6 +192,14 @@ Pull reads from Vault and writes locally with correct permissions.
 - Status: `diegops secrets status` — shows SYNCED / DIFFERS / LOCAL_ONLY / VAULT_ONLY per file
 - Smart permissions: `*.pub` files get `0644`, everything else `0600`, directories `0700`
 - Per-file mode overrides supported in config
+
+### `diegops all` — unified push/pull
+
+- `all pull`: `sync pull` → `secrets pull --path $HOME/.ssh` → `repo apply` → `vault apply` → `secrets pull` (full) → `shell init`
+- `all push`: `secrets push` → `sync push`
+- Continues past a failed step; prints an `OK`/`FAIL` summary and exits non-zero if anything failed — same pattern as `bootstrap`
+- `bootstrap` is now a thin wrapper: GitHub/Vault preflight checks (inside `all pull`) + `all::pull()` + hero banner
+- `repo` has no push (that's `git push` inside each repo) and `vault` is pull-only by design (team-owned Vault namespace) — neither appears in `all push`
 
 ### `diegops sync` — cloud config backup
 
