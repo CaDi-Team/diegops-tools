@@ -61,8 +61,9 @@ enum Commands {
     Cadi,
     /// Bootstrap a fresh workstation in one shot
     #[command(long_about = "Bootstrap a fresh workstation in one shot.\n\n\
-            Verifies GitHub and Vault authentication, then runs:\n  \
-            sync pull → repo apply → vault apply → secrets pull → shell init\n\n\
+            Runs 'diegops all pull' (sync pull → SSH keys → repo apply →\n\
+            vault apply → secrets pull → shell init), verifying GitHub and\n\
+            Vault authentication first.\n\n\
             Finishes with a summary report and the hero banner.\n\
             Requires: GitHub token and Vault session.")]
     Bootstrap,
