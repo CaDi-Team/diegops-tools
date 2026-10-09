@@ -142,6 +142,7 @@ enum Commands {
     #[command(
         long_about = "Cloud-sync ~/.diegops/ config files to a private GitHub repo.\n\n\
         Auto-creates repo: diegops-{username}-memory (private)\n\
+        Set $DIEGOPS_PROFILE (e.g. work) to use diegops-{username}-{profile}-memory\n\
         Syncs everything except tokens/ and bin/\n\
         Requires: diegops auth gh login first\n\n\
         Usage:\n  \

@@ -252,6 +252,7 @@ diegops sync status     Show diff between local and cloud
 
 **How it works:**
 - First `push` auto-creates a private repo `diegops-{your_github_username}-memory`
+- Set `DIEGOPS_PROFILE` to keep separate config sets (e.g. work vs personal machines): `DIEGOPS_PROFILE=work` syncs with `diegops-{your_github_username}-work-memory`. Export it in `~/.zshrc` on that machine, and pass it on first setup: `DIEGOPS_PROFILE=work diegops bootstrap`
 - Syncs all files in `~/.diegops/` **except** `tokens/` and `bin/` (security + size)
 - Uses GitHub Contents API — no local git clone needed
 - `push` overwrites cloud; `pull` overwrites local (explicit intent)
