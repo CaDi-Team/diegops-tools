@@ -14,6 +14,7 @@ pub enum SyncCommand {
     /// Upload local config files to GitHub (creates repo on first use)
     #[command(long_about = "Upload ~/.diegops/ config files to GitHub.\n\n\
         On first push, creates a private repo: diegops-{username}-memory\n\
+        (or diegops-{username}-{profile}-memory when $DIEGOPS_PROFILE is set)\n\
         Excludes tokens/ and bin/ directories.\n\
         Skips unchanged files (content-aware).")]
     Push,
@@ -73,9 +74,46 @@ fn get_username(token: &str) -> Result<String, Box<dyn std::error::Error>> {
     }
 }
 
-/// Returns the sync repository name for the given user.
-fn repo_name(username: &str) -> String {
-    format!("diegops-{username}-memory")
+/// Environment variable selecting a named sync profile (e.g. `work`).
+const PROFILE_ENV: &str = "DIEGOPS_PROFILE";
+
+/// Validates a raw profile value. Empty or `default` means no profile.
+fn parse_profile(raw: Option<&str>) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    let Some(value) = raw
+        .map(str::trim)
+        .filter(|v| !v.is_empty() && *v != "default")
+    else {
+        return Ok(None);
+    };
+    let valid = value.len() <= 32
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+    if !valid {
+        return Err(format!(
+            "invalid {PROFILE_ENV} '{value}': use up to 32 letters, digits, '-' or '_'"
+        )
+        .into());
+    }
+    Ok(Some(value.to_owned()))
+}
+
+/// Reads the active sync profile from `$DIEGOPS_PROFILE`.
+fn active_profile() -> Result<Option<String>, Box<dyn std::error::Error>> {
+    let raw = std::env::var(PROFILE_ENV).ok();
+    let profile = parse_profile(raw.as_deref())?;
+    if let Some(p) = &profile {
+        eprintln!("Using sync profile: {p}");
+    }
+    Ok(profile)
+}
+
+/// Returns the sync repository name for the given user and optional profile.
+fn repo_name(username: &str, profile: Option<&str>) -> String {
+    match profile {
+        Some(p) => format!("diegops-{username}-{p}-memory"),
+        None => format!("diegops-{username}-memory"),
+    }
 }
 
 /// Checks whether the sync repository already exists on GitHub.
@@ -129,7 +167,7 @@ fn ensure_repo(
     token: &str,
     username: &str,
 ) -> Result<(String, String), Box<dyn std::error::Error>> {
-    let repo = repo_name(username);
+    let repo = repo_name(username, active_profile()?.as_deref());
     if !repo_exists(token, username, &repo)? {
         eprintln!("Creating repository {username}/{repo} ...");
         create_repo(token, &repo)?;
@@ -389,7 +427,7 @@ pub fn push() -> Result<(), Box<dyn std::error::Error>> {
 pub fn pull() -> Result<(), Box<dyn std::error::Error>> {
     let token = require_token()?;
     let username = get_username(&token)?;
-    let repo = repo_name(&username);
+    let repo = repo_name(&username, active_profile()?.as_deref());
 
     if !repo_exists(&token, &username, &repo)? {
         return Err(format!(
@@ -486,7 +524,7 @@ pub fn pull() -> Result<(), Box<dyn std::error::Error>> {
 pub fn status() -> Result<(), Box<dyn std::error::Error>> {
     let token = require_token()?;
     let username = get_username(&token)?;
-    let repo = repo_name(&username);
+    let repo = repo_name(&username, active_profile()?.as_deref());
 
     let has_repo = repo_exists(&token, &username, &repo)?;
 
@@ -594,7 +632,7 @@ mod tests {
 
     #[test]
     fn repo_name_format() {
-        assert_eq!(repo_name("octocat"), "diegops-octocat-memory");
+        assert_eq!(repo_name("octocat", None), "diegops-octocat-memory");
     }
 
     #[test]
@@ -661,9 +699,41 @@ mod tests {
 
     #[test]
     fn repo_name_special_characters() {
-        assert_eq!(repo_name("user-name"), "diegops-user-name-memory");
-        assert_eq!(repo_name("user_name"), "diegops-user_name-memory");
-        assert_eq!(repo_name("user123"), "diegops-user123-memory");
-        assert_eq!(repo_name("CamelCase"), "diegops-CamelCase-memory");
+        assert_eq!(repo_name("user-name", None), "diegops-user-name-memory");
+        assert_eq!(repo_name("user_name", None), "diegops-user_name-memory");
+        assert_eq!(repo_name("user123", None), "diegops-user123-memory");
+        assert_eq!(repo_name("CamelCase", None), "diegops-CamelCase-memory");
+    }
+
+    #[test]
+    fn repo_name_with_profile() {
+        assert_eq!(
+            repo_name("octocat", Some("work")),
+            "diegops-octocat-work-memory"
+        );
+    }
+
+    #[test]
+    fn parse_profile_unset_empty_or_default_is_none() {
+        assert_eq!(parse_profile(None).ok(), Some(None));
+        assert_eq!(parse_profile(Some("")).ok(), Some(None));
+        assert_eq!(parse_profile(Some("  ")).ok(), Some(None));
+        assert_eq!(parse_profile(Some("default")).ok(), Some(None));
+    }
+
+    #[test]
+    fn parse_profile_accepts_valid_names() {
+        assert_eq!(parse_profile(Some("work")).ok(), Some(Some("work".into())));
+        assert_eq!(
+            parse_profile(Some(" client_a-2 ")).ok(),
+            Some(Some("client_a-2".into()))
+        );
+    }
+
+    #[test]
+    fn parse_profile_rejects_invalid_names() {
+        assert!(parse_profile(Some("../evil")).is_err());
+        assert!(parse_profile(Some("has space")).is_err());
+        assert!(parse_profile(Some(&"x".repeat(33))).is_err());
     }
 }
