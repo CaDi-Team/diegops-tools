@@ -228,6 +228,24 @@ fn base64_decode(encoded: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
 // Vault interaction helpers
 // ---------------------------------------------------------------------------
 
+/// Merges changed `(name, base64)` pairs over the current Vault data.
+///
+/// KV v2 `put` replaces the entire secret, so the full key set must be sent
+/// on every write. Non-string Vault values are dropped. Output is sorted.
+fn merge_for_put(
+    vault_state: &serde_json::Map<String, serde_json::Value>,
+    changed: &[(String, String)],
+) -> Vec<(String, String)> {
+    let mut merged: std::collections::BTreeMap<String, String> = vault_state
+        .iter()
+        .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+        .collect();
+    for (k, v) in changed {
+        merged.insert(k.clone(), v.clone());
+    }
+    merged.into_iter().collect()
+}
+
 /// Writes key-value pairs to a Vault KV v2 path.
 ///
 /// Each pair is passed as `key=value` on the command line.
@@ -459,8 +477,18 @@ pub fn push(
             continue;
         }
 
-        // Fetch current vault state for comparison (treat missing path as empty)
-        let vault_state = super::common::vault_kv_get(&folder.vault_path).unwrap_or_default();
+        // Fetch current vault state for comparison (treat missing path as empty).
+        // Any other error aborts this folder: the write below is a full
+        // replacement, so pushing against an unknown state could drop keys.
+        let vault_state = match super::common::vault_kv_get(&folder.vault_path) {
+            Ok(map) => map,
+            Err(e) if e.to_string().contains("No value found") => serde_json::Map::new(),
+            Err(e) => {
+                eprintln!("  FAIL  {e}");
+                failures.push(folder.dest.clone());
+                continue;
+            }
+        };
 
         // Read and encode each file, collect pairs that differ from vault
         let mut pairs: Vec<(String, String)> = Vec::new();
@@ -479,9 +507,10 @@ pub fn push(
             let encoded = base64_encode(&content);
 
             // Compare with current vault value
-            let vault_value = vault_state.get(name).and_then(|v| v.as_str()).unwrap_or("");
+            // A missing key must count as changed, even for empty files.
+            let vault_value = vault_state.get(name).and_then(|v| v.as_str());
 
-            if vault_value == encoded {
+            if vault_value == Some(encoded.as_str()) {
                 eprintln!("  SKIP  {name} (unchanged)");
                 n_unchanged += 1;
             } else {
@@ -498,8 +527,10 @@ pub fn push(
             continue;
         }
 
-        // Push all changed pairs in one vault kv put call
-        let kv_pairs: Vec<(&str, &str)> = pairs
+        // `vault kv put` replaces the whole secret, so write the full merged
+        // set (existing Vault keys + changed files), not just the changes.
+        let merged = merge_for_put(&vault_state, &pairs);
+        let kv_pairs: Vec<(&str, &str)> = merged
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
@@ -1055,6 +1086,33 @@ fn append_to_secrets_config(
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn merge_for_put_keeps_unchanged_vault_keys() {
+        let mut state = serde_json::Map::new();
+        state.insert("a".into(), serde_json::Value::String("A".into()));
+        state.insert("b".into(), serde_json::Value::String("B".into()));
+        let changed = vec![
+            ("b".to_string(), "B2".to_string()),
+            ("c".to_string(), "C".to_string()),
+        ];
+        let merged = merge_for_put(&state, &changed);
+        assert_eq!(
+            merged,
+            vec![
+                ("a".to_string(), "A".to_string()),
+                ("b".to_string(), "B2".to_string()),
+                ("c".to_string(), "C".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn merge_for_put_empty_state_returns_changes() {
+        let state = serde_json::Map::new();
+        let changed = vec![("x".to_string(), "X".to_string())];
+        assert_eq!(merge_for_put(&state, &changed), changed);
+    }
 
     // -----------------------------------------------------------------------
     // Config parsing
