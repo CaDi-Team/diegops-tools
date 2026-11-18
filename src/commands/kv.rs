@@ -86,6 +86,11 @@ pub fn run(cmd: KvCommand, backend: Option<&str>) -> Result<(), BoxError> {
             }
         }
         KvCommand::List { path } => {
+            if is_root_path(&path) {
+                let (_, cfg) = secrets_backend::load_config()?;
+                eprintln!("{}", root_list_message(&cfg));
+                return Ok(());
+            }
             let b = secrets_backend::open(backend)?;
             for e in b.list(&path)? {
                 println!("{e}");
@@ -114,6 +119,10 @@ pub fn run(cmd: KvCommand, backend: Option<&str>) -> Result<(), BoxError> {
             if src_kind == dst_kind {
                 return Err("--from and --to must be different backends".into());
             }
+            eprint!(
+                "{}",
+                migrate_header(&cfg, src_kind, dst_kind, &secrets_backend::real_env)
+            );
             let src = secrets_backend::open_kind(&cfg, src_kind)?;
             let dst = secrets_backend::open_kind(&cfg, dst_kind)?;
             let reports = migrate::migrate(src.as_ref(), dst.as_ref(), &prefixes, dry_run)?;
@@ -127,6 +136,109 @@ pub fn run(cmd: KvCommand, backend: Option<&str>) -> Result<(), BoxError> {
         }
     }
     Ok(())
+}
+
+/// True when `path` names no mount (e.g. `/`).
+pub fn is_root_path(path: &str) -> bool {
+    path.split('/').all(|s| s.trim().is_empty())
+}
+
+/// Message for `kv list /`: top-level listing is per mount.
+pub fn root_list_message(cfg: &config::Config) -> String {
+    let mounts: Vec<&str> = cfg
+        .infisical
+        .mounts
+        .iter()
+        .map(|m| m.mount.as_str())
+        .collect();
+    let mut msg = String::from(
+        "listing the root is not supported: pass a mount, e.g. `diegops kv list dpinto-work`",
+    );
+    if !mounts.is_empty() {
+        msg.push_str(&format!("\nconfigured mounts: {}", mounts.join(", ")));
+    }
+    msg
+}
+
+fn env_or(
+    env: &dyn Fn(&str) -> Option<String>,
+    key: &str,
+    file: Option<&String>,
+) -> (Option<String>, bool) {
+    match env(key).filter(|s| !s.trim().is_empty()) {
+        Some(v) => {
+            let overrides = file.is_some_and(|f| f != &v);
+            (Some(v), overrides)
+        }
+        None => (file.cloned(), false),
+    }
+}
+
+fn describe(
+    cfg: &config::Config,
+    kind: config::BackendKind,
+    env: &dyn Fn(&str) -> Option<String>,
+    warnings: &mut Vec<String>,
+) -> String {
+    match kind {
+        config::BackendKind::Vault => {
+            let (addr, o1) = env_or(env, "VAULT_ADDR", cfg.vault.address.as_ref());
+            let (ns, o2) = env_or(env, "VAULT_NAMESPACE", cfg.vault.namespace.as_ref());
+            for (o, k) in [(o1, "VAULT_ADDR"), (o2, "VAULT_NAMESPACE")] {
+                if o {
+                    warnings.push(format!(
+                        "warning: {k} env overrides the [vault] config value; unset it to use the config"
+                    ));
+                }
+            }
+            format!(
+                "vault {} (namespace {})",
+                addr.as_deref().unwrap_or("<unset>"),
+                ns.as_deref().unwrap_or("<root>")
+            )
+        }
+        config::BackendKind::Infisical => {
+            let i = &cfg.infisical;
+            let (url, _) = env_or(env, "INFISICAL_API_URL", i.site_url.as_ref());
+            let env_slug = i.environment.as_deref().unwrap_or("prod");
+            let mut s = format!(
+                "infisical {} (project {}, env {})",
+                url.as_deref().unwrap_or(config::DEFAULT_INFISICAL_URL),
+                i.project_id.as_deref().unwrap_or("<unset>"),
+                env_slug
+            );
+            for m in &i.mounts {
+                s.push_str(&format!(
+                    "\n            mount {} -> project {}, env {}",
+                    m.mount,
+                    m.project_id
+                        .as_deref()
+                        .or(i.project_id.as_deref())
+                        .unwrap_or("<unset>"),
+                    m.environment.as_deref().unwrap_or(env_slug)
+                ));
+            }
+            s
+        }
+    }
+}
+
+/// Plan header for `kv migrate` (addresses/ids only, never tokens).
+pub fn migrate_header(
+    cfg: &config::Config,
+    from: config::BackendKind,
+    to: config::BackendKind,
+    env: &dyn Fn(&str) -> Option<String>,
+) -> String {
+    let mut warnings = Vec::new();
+    let src = describe(cfg, from, env, &mut warnings);
+    let dst = describe(cfg, to, env, &mut warnings);
+    let mut out = format!("source: {src}\ntarget: {dst}\n");
+    for w in warnings {
+        out.push_str(&w);
+        out.push('\n');
+    }
+    out
 }
 
 /// Parses `KEY=@file` or `KEY=-` (stdin).
