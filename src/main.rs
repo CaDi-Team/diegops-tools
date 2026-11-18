@@ -1,4 +1,5 @@
 mod commands;
+mod secrets_backend;
 
 use clap::{CommandFactory, Parser, Subcommand};
 use commands::all::AllCommand;
