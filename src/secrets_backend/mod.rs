@@ -34,3 +34,47 @@ pub trait SecretsBackend {
         Ok(path.to_string())
     }
 }
+
+/// Real environment lookup.
+pub fn real_env(key: &str) -> Option<String> {
+    std::env::var(key).ok()
+}
+
+/// Home directory (`$HOME`, else `$USERPROFILE`).
+pub fn home() -> std::path::PathBuf {
+    std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(std::path::PathBuf::from)
+        .unwrap_or_default()
+}
+
+/// Loads the diegops config from its default location.
+pub fn load_config() -> Result<(std::path::PathBuf, config::Config), BoxError> {
+    let path = config::default_path(&real_env, &home());
+    let cfg = config::load(&path)?;
+    Ok((path, cfg))
+}
+
+/// Opens a backend of the given kind using the real config and env.
+pub fn open_kind(
+    cfg: &config::Config,
+    kind: config::BackendKind,
+) -> Result<Box<dyn SecretsBackend>, BoxError> {
+    Ok(match kind {
+        config::BackendKind::Infisical => Box::new(infisical::InfisicalBackend::new(
+            config::resolve_infisical(cfg, &real_env)?,
+        )),
+        config::BackendKind::Vault => Box::new(vault::VaultBackend::new(config::resolve_vault(
+            cfg,
+            &real_env,
+            &home(),
+        )?)?),
+    })
+}
+
+/// Opens the selected backend (flag > env > config > Infisical).
+pub fn open(flag: Option<&str>) -> Result<Box<dyn SecretsBackend>, BoxError> {
+    let (_, cfg) = load_config()?;
+    let kind = config::select_kind(&cfg, flag, &real_env)?;
+    open_kind(&cfg, kind)
+}

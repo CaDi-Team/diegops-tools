@@ -39,6 +39,7 @@ impl InfisicalBackend {
     }
 
     /// Base delay for 429 retries (tests use 1 ms).
+    #[cfg(test)]
     pub fn with_retry_delay_ms(mut self, ms: u64) -> Self {
         self.retry_delay_ms = ms;
         self

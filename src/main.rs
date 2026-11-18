@@ -102,6 +102,18 @@ enum Commands {
         #[command(subcommand)]
         cmd: VaultCommand,
     },
+    /// Read/write secrets in the configured backend (Infisical default, Vault/OpenBao)
+    #[command(long_about = "Read and write secrets in the configured backend.\n\n\
+        Backend: --backend > $DIEGOPS_SECRETS_BACKEND > `backend` in\n\
+        ~/.config/diegops/config.toml > infisical (Infisical Cloud).\n\
+        Paths are <mount>/<path> as in Vault KV v2. See docs/secrets-backends.md.")]
+    Kv {
+        /// Backend: infisical | vault (alias openbao)
+        #[arg(long, global = true)]
+        backend: Option<String>,
+        #[command(subcommand)]
+        cmd: commands::kv::KvCommand,
+    },
     /// Manage secret files — push, pull, and status
     #[command(
         long_about = "Manage secret files — push, pull, and check sync status.\n\n\
@@ -272,6 +284,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     commands::vault::init(None)?;
                 }
             }
+        }
+        Some(Commands::Kv { cmd, backend }) => {
+            commands::kv::run(cmd, backend.as_deref())?;
         }
         Some(Commands::Secrets { cmd }) => {
             let config_path_str;
