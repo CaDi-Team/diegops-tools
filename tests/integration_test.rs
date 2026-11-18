@@ -607,3 +607,49 @@ fn secrets_update_is_idempotent() {
 
     let _ = fs::remove_dir_all(&tmp);
 }
+
+#[test]
+fn kv_help_lists_backend_commands() {
+    let out = diegops().args(["kv", "--help"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    for cmd in ["get", "list", "put", "migrate", "backend"] {
+        assert!(s.contains(cmd), "missing {cmd} in: {s}");
+    }
+}
+
+#[test]
+fn kv_vault_backend_without_address_fails_clearly() {
+    let home = std::env::temp_dir().join(format!("diegops-kv-home-{}", std::process::id()));
+    std::fs::create_dir_all(&home).unwrap();
+    let out = diegops()
+        .args(["kv", "--backend", "vault", "get", "dpinto-config/x"])
+        .env("HOME", &home)
+        .env_remove("VAULT_ADDR")
+        .env_remove("DIEGOPS_CONFIG")
+        .env("XDG_CONFIG_HOME", &home)
+        .env("VAULT_TOKEN", "t")
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("no Vault address"), "{err}");
+    std::fs::remove_dir_all(&home).unwrap();
+}
+
+#[test]
+fn kv_backend_reports_infisical_by_default() {
+    let home = std::env::temp_dir().join(format!("diegops-kv-def-{}", std::process::id()));
+    std::fs::create_dir_all(&home).unwrap();
+    let out = diegops()
+        .args(["kv", "backend"])
+        .env("HOME", &home)
+        .env("XDG_CONFIG_HOME", &home)
+        .env_remove("DIEGOPS_CONFIG")
+        .env_remove("DIEGOPS_SECRETS_BACKEND")
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(String::from_utf8_lossy(&out.stdout).contains("infisical"));
+    std::fs::remove_dir_all(&home).unwrap();
+}

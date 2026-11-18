@@ -92,93 +92,27 @@ pub fn read_config_file(path: &Path) -> Result<String, Box<dyn std::error::Error
     })
 }
 
-/// Checks that the `vault` CLI is available on PATH.
-pub fn check_vault_binary() -> Result<(), Box<dyn std::error::Error>> {
-    use std::process::Command;
-    match Command::new("vault").arg("--version").output() {
-        Ok(output) if output.status.success() => Ok(()),
-        Ok(_) => Err("vault CLI found but returned an error. Check your installation.".into()),
-        Err(_) => Err(
-            "vault CLI not found on PATH. Install it from https://developer.hashicorp.com/vault/install"
-                .into(),
-        ),
-    }
-}
-
-/// Checks that VAULT_ADDR is set.
-pub fn check_vault_addr() -> Result<(), Box<dyn std::error::Error>> {
-    if std::env::var("VAULT_ADDR").is_err() {
-        return Err("VAULT_ADDR is not set. Export it or configure your Vault client".into());
-    }
-    Ok(())
-}
-
-/// Checks that the current Vault token is valid.
-pub fn check_vault_auth() -> Result<(), Box<dyn std::error::Error>> {
-    use std::process::Command;
-    let output = Command::new("vault")
-        .args(["token", "lookup"])
-        .output()
-        .map_err(|e| format!("could not run vault: {e}"))?;
-
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err("vault is not authenticated. Run 'vault login' first".into())
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Vault KV helpers (shared by secrets.rs and vault.rs)
 // ---------------------------------------------------------------------------
 
-/// Fetches all key-value pairs from a Vault KV v2 path.
+/// Fetches all key-value pairs at `path` from the configured backend.
 ///
-/// Returns a map of key → value. On error, returns a user-friendly message.
-pub fn vault_kv_get(
-    vault_path: &str,
+/// Same shape as [`vault_kv_get`] so callers are backend-agnostic.
+pub fn kv_get(
+    backend: &dyn crate::secrets_backend::SecretsBackend,
+    path: &str,
 ) -> Result<serde_json::Map<String, serde_json::Value>, Box<dyn std::error::Error>> {
-    use std::process::Command;
-    let output = Command::new("vault")
-        .args(["kv", "get", "-format=json", vault_path])
-        .output()
-        .map_err(|e| format!("could not run vault: {e}"))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stderr = stderr.trim();
-        if stderr.contains("permission denied") || stderr.contains("403") {
-            return Err(
-                format!("access denied for '{vault_path}'. Check your Vault policies").into(),
-            );
-        }
-        if stderr.contains("no secrets") || stderr.contains("Not Found") || stderr.contains("404") {
-            return Err(format!(
-                "secret not found at '{vault_path}'. Verify the path exists in Vault"
-            )
-            .into());
-        }
-        return Err(format!("vault kv get failed for '{vault_path}': {stderr}").into());
-    }
-
-    parse_vault_kv_response(&output.stdout, vault_path)
-}
-
-/// Parses the JSON response from `vault kv get -format=json`.
-///
-/// Extracted for testability — the JSON structure is `{ "data": { "data": { ... } } }`.
-fn parse_vault_kv_response(
-    json_bytes: &[u8],
-    vault_path: &str,
-) -> Result<serde_json::Map<String, serde_json::Value>, Box<dyn std::error::Error>> {
-    let json: serde_json::Value = serde_json::from_slice(json_bytes)?;
-    let data = json
-        .get("data")
-        .and_then(|d| d.get("data"))
-        .and_then(|d| d.as_object())
-        .ok_or_else(|| format!("unexpected JSON structure from vault kv get for '{vault_path}'"))?;
-
-    Ok(data.clone())
+    let data = backend.get(path)?.ok_or_else(|| {
+        format!(
+            "secret not found at '{path}'. Verify the path exists in {}",
+            backend.name()
+        )
+    })?;
+    Ok(data
+        .into_iter()
+        .map(|(k, v)| (k, serde_json::Value::String(v)))
+        .collect())
 }
 
 /// Writes `content` to `path`, creating a `.bak` backup if the file already
@@ -291,39 +225,43 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // parse_vault_kv_response
+    // kv_get (backend-agnostic)
+    struct OneSecret;
+    impl crate::secrets_backend::SecretsBackend for OneSecret {
+        fn name(&self) -> &'static str {
+            "mem"
+        }
+        fn get(
+            &self,
+            path: &str,
+        ) -> Result<Option<crate::secrets_backend::SecretMap>, Box<dyn std::error::Error>> {
+            Ok((path == "m/a").then(|| [("k".to_string(), "v".to_string())].into()))
+        }
+        fn list(&self, _: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+            Ok(vec![])
+        }
+        fn put(
+            &self,
+            _: &str,
+            _: &crate::secrets_backend::SecretMap,
+        ) -> Result<(), Box<dyn std::error::Error>> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn kv_get_returns_string_values() {
+        let m = kv_get(&OneSecret, "m/a").unwrap();
+        assert_eq!(m["k"], serde_json::json!("v"));
+    }
+
+    #[test]
+    fn kv_get_missing_path_is_not_found_error() {
+        let e = kv_get(&OneSecret, "m/b").unwrap_err().to_string();
+        assert!(e.contains("secret not found at 'm/b'"), "{e}");
+    }
+
     // -----------------------------------------------------------------------
-
-    #[test]
-    fn parse_vault_kv_response_extracts_data() {
-        let json = br#"{
-            "data": {
-                "data": {
-                    "database.env": "aGVsbG8=",
-                    "api.env": "d29ybGQ="
-                },
-                "metadata": { "version": 1 }
-            }
-        }"#;
-        let data = parse_vault_kv_response(json, "secret/test").unwrap();
-        assert_eq!(
-            data.get("database.env").unwrap().as_str().unwrap(),
-            "aGVsbG8="
-        );
-        assert_eq!(data.get("api.env").unwrap().as_str().unwrap(), "d29ybGQ=");
-        assert_eq!(data.len(), 2);
-    }
-
-    #[test]
-    fn parse_vault_kv_response_rejects_missing_data_data() {
-        let json = br#"{"data": {"wrong": "shape"}}"#;
-        assert!(parse_vault_kv_response(json, "secret/test").is_err());
-    }
-
-    #[test]
-    fn parse_vault_kv_response_rejects_bad_json() {
-        assert!(parse_vault_kv_response(b"not json", "secret/test").is_err());
-    }
 
     // -----------------------------------------------------------------------
     // write_file_with_backup

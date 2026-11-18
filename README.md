@@ -191,6 +191,21 @@ diegops repo list-diff     # see what's missing
 
 ---
 
+## `diegops kv` — Secrets Backend (Infisical default, Vault/OpenBao)
+
+```sh
+diegops kv backend                         # which backend + config file
+diegops kv list dpinto-config              # sub-paths
+diegops kv get dpinto-config/kube          # key names only
+diegops kv get dpinto-config/kube --key K  # one raw value to stdout
+diegops kv put dpinto-config/app TOKEN=- < token.txt   # or KEY=@file
+diegops kv migrate dpinto-config dpinto-work --dry-run # Vault/OpenBao -> Infisical
+```
+
+Configured in `~/.config/diegops/config.toml` (no built-in addresses). Design:
+[docs/secrets-backends.md](docs/secrets-backends.md); migration:
+[docs/infisical-migration-runbook.md](docs/infisical-migration-runbook.md).
+
 ## `diegops vault` — Secret Management
 
 Pull secrets from HashiCorp Vault KV v2 and write `.env` files.
@@ -214,7 +229,7 @@ targets:
         keys: "*"
 ```
 
-**Requires:** `vault` CLI on PATH, `VAULT_ADDR` set, authenticated session.
+**Requires:** a configured secrets backend — Infisical (default) or Vault/OpenBao — see [docs/secrets-backends.md](docs/secrets-backends.md).
 
 > `.env` files use `KEY="value"` format. `.gitignore` is auto-updated. Content-aware skip avoids unnecessary writes.
 
@@ -341,7 +356,7 @@ diegops secrets status [--config F]           Compare local vs Vault
 - `status` shows SYNCED / DIFFERS / LOCAL_ONLY / VAULT_ONLY per file
 - Existing files are backed up to `.bak` before overwrite
 
-**Requires:** `vault` CLI on PATH, `VAULT_ADDR` set, authenticated session.
+**Requires:** a configured secrets backend — Infisical (default) or Vault/OpenBao — see [docs/secrets-backends.md](docs/secrets-backends.md).
 
 > Override config path with `--config <path>` or `$DIEGOPS_SECRETS_CONFIG`.
 

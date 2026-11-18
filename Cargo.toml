@@ -23,6 +23,11 @@ serde_yaml = "0.9"
 humantime = "2"
 base64 = "0.22"
 sha1 = "0.11"
+toml = "0.8"
+sha2 = "0.10"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+rustls-pki-types = { version = "1", features = ["std"] }
+webpki-roots = "0.26"
 
 # Unix targets: extract .tar.gz release archives
 [target.'cfg(unix)'.dependencies]
@@ -38,3 +43,6 @@ opt-level = "z"      # Minimize binary size
 lto = true           # Link-time optimization
 codegen-units = 1    # Better optimization at cost of compile time
 strip = true         # Strip debug symbols from binary
+
+[dev-dependencies]
+mockito = "1"

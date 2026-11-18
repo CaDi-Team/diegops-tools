@@ -1,4 +1,5 @@
 mod commands;
+mod secrets_backend;
 
 use clap::{CommandFactory, Parser, Subcommand};
 use commands::all::AllCommand;
@@ -65,14 +66,14 @@ enum Commands {
             vault apply → secrets pull → shell init), verifying GitHub and\n\
             Vault authentication first.\n\n\
             Finishes with a summary report and the hero banner.\n\
-            Requires: GitHub token and Vault session.")]
+            Requires: GitHub token and secrets-backend credentials.")]
     Bootstrap,
     /// Push or pull everything: repos, secrets, vault, and cloud config
     #[command(long_about = "Push or pull everything in one command.\n\n\
             all pull: sync pull → SSH keys → repo apply → vault apply → secrets pull → shell init\n\
             all push: secrets push → sync push\n\n\
             Continues past a failed step and prints a summary at the end.\n\
-            Requires: GitHub token and Vault session (for pull).")]
+            Requires: GitHub token and secrets-backend credentials (for pull).")]
     All {
         #[command(subcommand)]
         cmd: AllCommand,
@@ -92,7 +93,8 @@ enum Commands {
     #[command(
         long_about = "Manage Vault secrets — pull secrets and write .env files.\n\n\
         Config: ~/.diegops/repo-vault.yaml (override with --config or $DIEGOPS_VAULT_CONFIG)\n\
-        Requires: vault CLI on PATH, VAULT_ADDR set, authenticated session.\n\n\
+        Requires: a configured secrets backend (Infisical default, or Vault/OpenBao)\n\
+        in ~/.config/diegops/config.toml — see docs/secrets-backends.md.\n\n\
         Quick start:\n  \
         diegops vault init    # create sample config\n  \
         diegops vault apply   # pull secrets and write .env files"
@@ -100,6 +102,18 @@ enum Commands {
     Vault {
         #[command(subcommand)]
         cmd: VaultCommand,
+    },
+    /// Read/write secrets in the configured backend (Infisical default, Vault/OpenBao)
+    #[command(long_about = "Read and write secrets in the configured backend.\n\n\
+        Backend: --backend > $DIEGOPS_SECRETS_BACKEND > `backend` in\n\
+        ~/.config/diegops/config.toml > infisical (Infisical Cloud).\n\
+        Paths are <mount>/<path> as in Vault KV v2. See docs/secrets-backends.md.")]
+    Kv {
+        /// Backend: infisical | vault (alias openbao)
+        #[arg(long, global = true)]
+        backend: Option<String>,
+        #[command(subcommand)]
+        cmd: commands::kv::KvCommand,
     },
     /// Manage secret files — push, pull, and status
     #[command(
@@ -271,6 +285,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     commands::vault::init(None)?;
                 }
             }
+        }
+        Some(Commands::Kv { cmd, backend }) => {
+            commands::kv::run(cmd, backend.as_deref())?;
         }
         Some(Commands::Secrets { cmd }) => {
             let config_path_str;

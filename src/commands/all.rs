@@ -205,9 +205,7 @@ fn check_github() -> Result<String, Box<dyn std::error::Error>> {
 
 /// Verifies Vault CLI is available and authenticated.
 fn check_vault() -> Result<(), Box<dyn std::error::Error>> {
-    super::common::check_vault_binary()?;
-    super::common::check_vault_addr()?;
-    super::common::check_vault_auth()?;
+    crate::secrets_backend::open(None)?;
     Ok(())
 }
 
