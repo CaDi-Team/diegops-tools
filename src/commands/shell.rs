@@ -41,9 +41,6 @@ export PATH=\"$HOME/.diegops/bin:$HOME/.local/bin:$PATH\"
 # -- Kubeconfig discovery -------------------------------------------------------
 export KUBECONFIG=$(find ~/.kube -maxdepth 1 -type f \\( -name \"*.yaml\" -o -name \"*.yml\" -o -name \"config\" \\) 2>/dev/null | tr '\\n' ':' | sed 's/:$//')
 
-# -- Environment ----------------------------------------------------------------
-export VAULT_ADDR=\"https://cadi-vault.cadi-labs.com\"
-
 # -- Aliases --------------------------------------------------------------------
 alias code='code-insiders'
 alias cc='claude --dangerously-skip-permissions'
@@ -60,9 +57,6 @@ export PATH=\"$HOME/.diegops/bin:$HOME/.local/bin:$PATH\"
 
 # -- Kubeconfig discovery -------------------------------------------------------
 export KUBECONFIG=$(find ~/.kube -maxdepth 1 -type f \\( -name \"*.yaml\" -o -name \"*.yml\" -o -name \"config\" \\) 2>/dev/null | tr '\\n' ':' | sed 's/:$//')
-
-# -- Environment ----------------------------------------------------------------
-export VAULT_ADDR=\"https://cadi-vault.cadi-labs.com\"
 
 # -- Aliases --------------------------------------------------------------------
 alias code='code-insiders'
@@ -360,5 +354,20 @@ fn run_cmd(program: &str, args: &[&str]) -> Result<(), Box<dyn std::error::Error
             .collect::<Vec<_>>()
             .join("\n");
         Err(format!("`{full_cmd}` failed (exit code {code})\n{indented}").into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shell_configs_do_not_hard_code_a_vault_address() {
+        for cfg in [ZSH_CONFIG, BASH_CONFIG] {
+            assert!(
+                !cfg.contains("VAULT_ADDR"),
+                "backend address belongs in config.toml"
+            );
+        }
     }
 }

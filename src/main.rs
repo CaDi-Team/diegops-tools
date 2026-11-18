@@ -66,14 +66,14 @@ enum Commands {
             vault apply → secrets pull → shell init), verifying GitHub and\n\
             Vault authentication first.\n\n\
             Finishes with a summary report and the hero banner.\n\
-            Requires: GitHub token and Vault session.")]
+            Requires: GitHub token and secrets-backend credentials.")]
     Bootstrap,
     /// Push or pull everything: repos, secrets, vault, and cloud config
     #[command(long_about = "Push or pull everything in one command.\n\n\
             all pull: sync pull → SSH keys → repo apply → vault apply → secrets pull → shell init\n\
             all push: secrets push → sync push\n\n\
             Continues past a failed step and prints a summary at the end.\n\
-            Requires: GitHub token and Vault session (for pull).")]
+            Requires: GitHub token and secrets-backend credentials (for pull).")]
     All {
         #[command(subcommand)]
         cmd: AllCommand,
@@ -93,7 +93,8 @@ enum Commands {
     #[command(
         long_about = "Manage Vault secrets — pull secrets and write .env files.\n\n\
         Config: ~/.diegops/repo-vault.yaml (override with --config or $DIEGOPS_VAULT_CONFIG)\n\
-        Requires: vault CLI on PATH, VAULT_ADDR set, authenticated session.\n\n\
+        Requires: a configured secrets backend (Infisical default, or Vault/OpenBao)\n\
+        in ~/.config/diegops/config.toml — see docs/secrets-backends.md.\n\n\
         Quick start:\n  \
         diegops vault init    # create sample config\n  \
         diegops vault apply   # pull secrets and write .env files"

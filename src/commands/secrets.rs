@@ -22,7 +22,6 @@
 use serde::Deserialize;
 use std::fs;
 use std::path::Path;
-use std::process::Command;
 
 // ---------------------------------------------------------------------------
 // Clap sub-command definitions
@@ -246,30 +245,6 @@ fn merge_for_put(
     merged.into_iter().collect()
 }
 
-/// Writes key-value pairs to a Vault KV v2 path.
-///
-/// Each pair is passed as `key=value` on the command line.
-fn vault_kv_put(
-    vault_path: &str,
-    pairs: &[(&str, &str)],
-) -> Result<(), Box<dyn std::error::Error>> {
-    let mut cmd = Command::new("vault");
-    cmd.args(["kv", "put", vault_path]);
-    for (key, value) in pairs {
-        cmd.arg(format!("{key}={value}"));
-    }
-    let output = cmd
-        .output()
-        .map_err(|e| format!("could not run vault: {e}"))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stderr = stderr.trim();
-        return Err(format!("vault kv put failed for '{vault_path}': {stderr}").into());
-    }
-    Ok(())
-}
-
 // ---------------------------------------------------------------------------
 // File helpers
 // ---------------------------------------------------------------------------
@@ -423,9 +398,7 @@ pub fn push(
     path_filter: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Pre-flight checks — fatal, exit immediately on failure
-    super::common::check_vault_binary()?;
-    super::common::check_vault_addr()?;
-    super::common::check_vault_auth()?;
+    let backend = crate::secrets_backend::open(None)?;
 
     let config = load_config(config_path)?;
     let filter = path_filter.map(super::common::expand_home);
@@ -480,7 +453,7 @@ pub fn push(
         // Fetch current vault state for comparison (treat missing path as empty).
         // Any other error aborts this folder: the write below is a full
         // replacement, so pushing against an unknown state could drop keys.
-        let vault_state = match super::common::vault_kv_get(&folder.vault_path) {
+        let vault_state = match super::common::kv_get(backend.as_ref(), &folder.vault_path) {
             Ok(map) => map,
             Err(e) if e.to_string().contains("No value found") => serde_json::Map::new(),
             Err(e) => {
@@ -534,7 +507,13 @@ pub fn push(
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
-        match vault_kv_put(&folder.vault_path, &kv_pairs) {
+        match backend.put(
+            &folder.vault_path,
+            &kv_pairs
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
+        ) {
             Ok(()) => {
                 for (name, _) in &pairs {
                     eprintln!("  PUSH  {name}");
@@ -575,9 +554,7 @@ pub fn pull(
     path_filter: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Pre-flight checks — fatal, exit immediately on failure
-    super::common::check_vault_binary()?;
-    super::common::check_vault_addr()?;
-    super::common::check_vault_auth()?;
+    let backend = crate::secrets_backend::open(None)?;
 
     let config = load_config(config_path)?;
     let filter = path_filter.map(super::common::expand_home);
@@ -625,7 +602,7 @@ pub fn pull(
         }
 
         // Fetch vault data
-        let vault_data = match super::common::vault_kv_get(&folder.vault_path) {
+        let vault_data = match super::common::kv_get(backend.as_ref(), &folder.vault_path) {
             Ok(map) => map,
             Err(e) => {
                 eprintln!("  FAIL  {e}");
@@ -748,9 +725,7 @@ pub fn status(config_path: Option<&Path>) -> Result<(), Box<dyn std::error::Erro
     use std::collections::BTreeSet;
 
     // Pre-flight checks — fatal, exit immediately on failure
-    super::common::check_vault_binary()?;
-    super::common::check_vault_addr()?;
-    super::common::check_vault_auth()?;
+    let backend = crate::secrets_backend::open(None)?;
 
     let config = load_config(config_path)?;
 
@@ -764,7 +739,7 @@ pub fn status(config_path: Option<&Path>) -> Result<(), Box<dyn std::error::Erro
         }
 
         // Fetch vault state
-        let vault_data = match super::common::vault_kv_get(&folder.vault_path) {
+        let vault_data = match super::common::kv_get(backend.as_ref(), &folder.vault_path) {
             Ok(map) => map,
             Err(e) => {
                 eprintln!("  FAIL  {e}");

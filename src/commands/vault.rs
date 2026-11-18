@@ -129,9 +129,7 @@ pub fn apply(
     path_filter: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Pre-flight checks — fatal, exit immediately on failure
-    super::common::check_vault_binary()?;
-    super::common::check_vault_addr()?;
-    super::common::check_vault_auth()?;
+    let backend = crate::secrets_backend::open(None)?;
 
     let config = load_config(config_path)?;
     let filter = path_filter.map(super::common::expand_home);
@@ -165,7 +163,7 @@ pub fn apply(
         let mut target_failed = false;
 
         for entry in &target.secrets {
-            match super::common::vault_kv_get(&entry.vault_path) {
+            match super::common::kv_get(backend.as_ref(), &entry.vault_path) {
                 Ok(data) => match &entry.keys {
                     KeySelector::All(s) if s == "*" => {
                         for (k, v) in &data {
