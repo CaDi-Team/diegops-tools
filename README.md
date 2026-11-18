@@ -3,175 +3,459 @@
 [![CI](https://github.com/CaDi-Team/diegops-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/CaDi-Team/diegops-tools/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Personal productivity CLI for humans and containers — workspace management, secret injection, cloud config sync, managed DevOps toolbox, and developer workstation setup in a single static binary.
+**One command to turn a fresh computer into *your* computer.**
 
-## What is diegops?
+`diegops` is a single, self-contained command-line program that sets up your workstations and keeps them in sync:
+your git repositories, your SSH keys and kubeconfigs, your `.env` files, your shell and your DevOps tools.
+Secrets are stored in a secrets manager (Infisical Cloud by default, or your own Vault/OpenBao), never in git.
 
-`diegops` solves a simple problem: **setting up and keeping multiple workstations in sync**. Whether you're jumping between a laptop, a desktop, a WSL environment, or a fresh container, you want the same repos cloned, the same SSH keys in place, the same `.env` files injected, and the same tools available — without manual copy-paste.
+## Contents
 
-It does this by treating **GitHub as the source of truth for configuration** and **HashiCorp Vault as the source of truth for secrets**:
+- [Who is it for?](#who-is-it-for)
+- [How it works](#how-it-works)
+- [Install](#install)
+- [Quick start: secrets in 5 minutes with Infisical Cloud](#quick-start-secrets-in-5-minutes-with-infisical-cloud)
+- [Which backend should I use?](#which-backend-should-i-use)
+- [Alternative: Vault or OpenBao (self-hosted)](#alternative-vault-or-openbao-self-hosted)
+- [secrets.yaml explained](#secretsyaml-explained)
+- [Daily workflows](#daily-workflows)
+- [Troubleshooting](#troubleshooting)
+- [Security notes](#security-notes)
+- [Command reference](#command-reference)
+- [Other commands](#other-commands) (repo, vault, auth, sync, tool, ktool, shell, devtools)
+- [Credits](#credits--karluiz-tools) · [Acknowledgements](#acknowledgements--open-source-tools) · [Development](#development)
 
-- **GitHub** stores your non-sensitive config files (repo lists, tool preferences, workspace layouts) in a private repo that `diegops sync` manages automatically. It also provides the API token that powers tool downloads and authenticated operations.
-- **Vault** stores your sensitive files (SSH keys, kubeconfigs, `.env` secrets) as base64-encoded KV entries. `diegops secrets` and `diegops vault` read and write these entries so your secrets travel with you securely — never in git, never in plaintext on disk longer than needed.
-
-On top of that, `diegops` bundles a **managed toolbox** (`diegops tool`) that downloads and updates common DevOps CLIs (gh, vault, terraform, helm, kubectl, jq, yq, k9s, trivy, trippy) so you don't need `brew`, `apt`, or manual downloads.
-
-`diegops` also integrates **[ktool cli](https://github.com/CaDi-Team/karluiz-tool-cli)** — a growing suite of free developer tools built by [Karluiz](https://karluiz.com/). Today `diegops ktool` manages the ktool binary and proxies commands like `kenv` for secret management. As ktool expands its capabilities, `diegops` will grow with it — ktool integration is a core part of the roadmap.
-
-The end result: run `diegops bootstrap` on a fresh machine and walk away with a fully configured workstation.
-
----
-
-### Prerequisites
-
-`diegops` currently depends on two external CLIs for most of its functionality:
-
-| Dependency | Used by | Install |
-|------------|---------|---------|
-| **[GitHub CLI (`gh`)](https://cli.github.com/)** | `auth`, `sync`, `bootstrap` | `diegops tool install gh` |
-| **[HashiCorp Vault (`vault`)](https://developer.hashicorp.com/vault)** | `vault`, `secrets`, `bootstrap` | `diegops tool install vault` |
-
-Both must be installed and authenticated before using the commands listed above. You can install them with `diegops tool install` or bring your own. More backend options are planned for the future, but **as of today these are hard requirements**.
-
-```sh
-diegops tool install gh         # install GitHub CLI
-diegops tool install vault      # install Vault CLI
-diegops auth gh login <PAT>     # authenticate with GitHub
-vault login                     # authenticate with Vault
-diegops bootstrap               # you're ready
-```
+More detail lives in [docs/](docs/README.md).
 
 ---
 
-## Supported Platforms
+## Who is it for?
 
-| OS | Architecture | Target |
-|----|-------------|--------|
-| macOS | Apple Silicon | `aarch64-apple-darwin` |
-| macOS | Intel | `x86_64-apple-darwin` |
-| Ubuntu / Debian | x86_64 | `x86_64-unknown-linux-gnu` |
-| Fedora / Bazzite / RHEL | x86_64 | `x86_64-unknown-linux-gnu` |
-| Alpine (containers) | x86_64 | `x86_64-unknown-linux-musl` |
-| Alpine (containers) | ARM64 | `aarch64-unknown-linux-musl` |
-| Windows (WSL / native) | x86_64 | `x86_64-pc-windows-gnu` |
+- **You use more than one machine** (laptop, desktop, WSL, a VM, a container) and want them all set up the same way.
+- **You re-install often** or get new hardware, and you're tired of copying `~/.ssh` and `.env` files by hand.
+- **You want secrets out of git and out of chat**, but don't want to run a server just for that.
+
+You only need to be comfortable typing commands into a terminal. Every step below says what to type and what you should see.
+
+## How it works
+
+```mermaid
+flowchart LR
+    U([You]) --> CLI[diegops CLI]
+    CLI --> CFG[/"~/.config/diegops/config.toml<br/>(which backend, IDs)"/]
+    CLI --> YAML[/"~/.diegops/*.yaml<br/>(what to sync)"/]
+    CLI --> FILES[("Local files<br/>~/.ssh, ~/.kube, .env")]
+    CLI --> TRAIT{{"Secrets backend<br/>(one interface)"}}
+    TRAIT -->|default| INF["Infisical Cloud<br/>(HTTPS, machine identity)"]
+    TRAIT -->|optional| BAO["Vault / OpenBao KV v2<br/>(self-hosted, token)"]
+    CLI --> GH["GitHub<br/>(private config repo)"]
+```
+
+- **Secrets** (SSH keys, kubeconfigs, `.env` values) go to the secrets backend. `diegops` talks to it directly over HTTPS, so no extra CLI is needed.
+- **Non-secret config** (`~/.diegops/*.yaml`) is backed up to a private GitHub repo by `diegops sync`.
+- **Local files** are written with safe permissions (`0600`; `*.pub` files get `0644`; folders `0700`) and backed up to `.bak` before being overwritten.
 
 ---
 
-## Installation
+## Install
 
-Download the binary for your platform from the [latest release](../../releases/latest) and put it somewhere on your `PATH`.
+Pre-built binaries are on [GitHub Releases](https://github.com/CaDi-Team/diegops-tools/releases/latest).
 
-### Linux / macOS (one-liner)
+| Your system | File to download (`<V>` = version, e.g. `v1.5.0`) |
+|---|---|
+| macOS, Apple Silicon (M1–M4) | `diegops-<V>-aarch64-apple-darwin.tar.gz` |
+| macOS, Intel | `diegops-<V>-x86_64-apple-darwin.tar.gz` |
+| Linux x86_64 (Ubuntu, Debian, Fedora, Bazzite, RHEL) | `diegops-<V>-x86_64-unknown-linux-gnu.tar.gz` |
+| Linux x86_64, static (Alpine, containers) | `diegops-<V>-x86_64-unknown-linux-musl.tar.gz` |
+| Linux ARM64, static (Raspberry Pi, ARM containers) | `diegops-<V>-aarch64-unknown-linux-musl.tar.gz` |
+| Windows x86_64 | `diegops-<V>-x86_64-pc-windows-gnu.zip` |
 
-```sh
-VERSION=$(curl -fsSL https://api.github.com/repos/CaDi-Team/diegops-tools/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
-TARGET=aarch64-apple-darwin   # see platform table above
-                               # Linux (Ubuntu/Fedora/Bazzite): x86_64-unknown-linux-gnu
-
-curl -fsSL "https://github.com/CaDi-Team/diegops-tools/releases/download/${VERSION}/diegops-${VERSION}-${TARGET}.tar.gz" \
-  | tar -xz
-sudo mv diegops /usr/local/bin/diegops
-```
-
-### Fedora / Bazzite
+### Linux / macOS
 
 ```sh
+# 1. Pick your target from the table above
+TARGET=x86_64-unknown-linux-gnu        # macOS Apple Silicon: aarch64-apple-darwin
+
+# 2. Download the latest release
 VERSION=$(curl -fsSL https://api.github.com/repos/CaDi-Team/diegops-tools/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
-curl -fsSL "https://github.com/CaDi-Team/diegops-tools/releases/download/${VERSION}/diegops-${VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
-  | tar -xz
-sudo mv diegops /usr/local/bin/diegops
+curl -fsSL "https://github.com/CaDi-Team/diegops-tools/releases/download/${VERSION}/diegops-${VERSION}-${TARGET}.tar.gz" | tar -xz
+
+# 3a. Install just for you (no sudo; recommended)
+mkdir -p ~/.local/bin && mv diegops ~/.local/bin/
+#     make sure ~/.local/bin is on your PATH:
+#     echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc   # or ~/.bashrc
+
+# 3b. ...or for every user on the machine
+# sudo mv diegops /usr/local/bin/
 ```
 
-### Alpine / containers (musl static)
+If you install to `~/.local/bin`, `diegops update` can replace itself without `sudo`. `/usr/local/bin` works too, but then updates need `sudo diegops update`.
 
-```sh
-VERSION=$(curl -fsSL https://api.github.com/repos/CaDi-Team/diegops-tools/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
-curl -fsSL "https://github.com/CaDi-Team/diegops-tools/releases/download/${VERSION}/diegops-${VERSION}-x86_64-unknown-linux-musl.tar.gz" \
-  | tar -xz -C /usr/local/bin
-```
+> macOS may block a downloaded binary the first time you run it. If it does, run `xattr -d com.apple.quarantine ~/.local/bin/diegops`.
 
 ### Windows (PowerShell)
 
 ```powershell
 $repo    = "CaDi-Team/diegops-tools"
 $version = (Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest").tag_name
-$url     = "https://github.com/$repo/releases/download/$version/diegops-$version-x86_64-pc-windows-gnu.zip"
-Invoke-WebRequest -Uri $url -OutFile diegops.zip
-Expand-Archive -Path diegops.zip -DestinationPath "$env:USERPROFILE\bin" -Force
+Invoke-WebRequest "https://github.com/$repo/releases/download/$version/diegops-$version-x86_64-pc-windows-gnu.zip" -OutFile diegops.zip
+Expand-Archive diegops.zip -DestinationPath "$env:USERPROFILE\bin" -Force   # add this folder to PATH
 ```
 
-### Updating
+### Check it worked
+
+```console
+$ diegops version
+diegops v1.5.0
+```
+
+To update later, run `diegops update`. It prints "Already up to date" when there is nothing new.
+
+---
+
+## Quick start: secrets in 5 minutes with Infisical Cloud
+
+### Why Infisical?
+
+[Infisical](https://infisical.com) is a hosted secrets manager. The **free tier** is enough for personal use, and **there is no server for you to run, patch or back up**. `diegops` uses it by default.
+
+These are the free-tier limits that matter here (see [pricing](https://infisical.com/pricing); checked November 2026):
+
+| Limit | What it means for you |
+|---|---|
+| 5 identities (people + machine identities) | You (1) + one `diegops` machine identity (1) leaves room for 3 more |
+| Unlimited projects, 3 environments | One project with the `prod` environment is enough |
+| **No secret version history or point-in-time recovery** | An overwrite cannot be undone in Infisical. **Keep your own offline backup** of important keys |
+| Rate limits (about 60 reads/min) | `diegops` waits and retries automatically; big runs just take longer |
+
+### First-time setup at a glance
+
+```mermaid
+flowchart TD
+    A[Install diegops] --> B[Sign up at app.infisical.com]
+    B --> C[Create project, keep env 'prod']
+    C --> D[Create machine identity<br/>with Universal Auth]
+    D --> E[Add identity to project as Admin]
+    E --> F[Store client secret locally<br/>file 0600 or OS keyring]
+    F --> G[Write ~/.config/diegops/config.toml]
+    G --> H{diegops kv backend<br/>says infisical?}
+    H -- yes --> I[diegops secrets init, edit, push]
+    H -- no --> G
+```
+
+### Step 1. Create an account and a project
+
+1. Sign up at <https://app.infisical.com> (US region) or <https://eu.infisical.com> (EU region). Turn on two-factor authentication.
+2. Create an **organization** (any name), then a **Secret Management project**, for example `personal`.
+3. Environments: new projects come with `dev`, `staging` and `prod`. `diegops` uses **`prod`** by default, and you can leave the others empty.
+4. Open *Project Settings* and copy the **Project ID**. It is an identifier, not a secret.
+
+### Step 2. Create a machine identity
+
+A *machine identity* is a login for a program instead of a person ([Infisical docs](https://infisical.com/docs/documentation/platform/identities/machine-identities)).
+`diegops` uses its **Universal Auth** method, which is a Client ID plus a Client Secret ([Infisical docs](https://infisical.com/docs/documentation/platform/identities/universal-auth)).
+
+1. Go to *Organization → Access Control → Identities → Create identity*. Name it `diegops-workstation` and give it the *Member* role.
+2. On that identity, add **Universal Auth**. The defaults are fine. An access-token TTL of `2592000` (30 days) avoids frequent re-logins.
+3. Copy the **Client ID**. It is not a secret.
+4. Click *Create Client Secret*. **It is shown only once**, so keep the browser tab open until Step 3 is done.
+5. In your project, go to *Access Control → Machine Identities → Add identity*, choose `diegops-workstation` and give it the **Admin** role. The free tier has no custom roles, and `diegops` needs to create folders.
+
+### Step 3. Store the client secret safely
+
+Pick **one** option. Neither one puts the secret in your shell history.
+
+**Option A: a private file** (works everywhere)
 
 ```sh
-diegops update
+mkdir -p ~/.config/diegops
+install -m 600 /dev/null ~/.config/diegops/infisical-client-secret
+read -rs -p "Paste the Infisical client secret, then Enter: " S \
+  && printf '%s' "$S" > ~/.config/diegops/infisical-client-secret; unset S; echo
+ls -l ~/.config/diegops/infisical-client-secret   # must show -rw-------
 ```
 
-Fetches the latest release, downloads the binary for your platform, and replaces itself in place. Idempotent — prints "Already up to date" if current.
+`read -rs` doesn't show what you paste and doesn't store it in history. `diegops` refuses to read the file if other users can read it.
 
-> **Permissions:** if the binary lives in `/usr/local/bin`, you may need `sudo diegops update`. The CLI will tell you.
+**Option B: the OS keyring** (Linux with `secret-tool`; on macOS the `security` command works the same way)
+
+```sh
+secret-tool store --label "Infisical diegops" service infisical account diegops
+# paste the secret at the prompt
+```
+
+### Step 4. Write the config file
+
+Create `~/.config/diegops/config.toml`. `diegops` also looks in `$XDG_CONFIG_HOME/diegops/config.toml`, or at any path you put in `$DIEGOPS_CONFIG`.
+
+```toml
+# Which backend to use: "infisical" (default) or "vault" (alias "openbao").
+backend = "infisical"
+
+[infisical]
+# site_url = "https://eu.infisical.com"   # only if your org is in the EU region
+project_id  = "<your-project-id>"          # Project Settings → Project ID
+environment = "prod"                       # environment slug (default "prod")
+client_id   = "<your-machine-identity-client-id>"
+
+# Where the client secret comes from: pick ONE.
+client_secret_file = "~/.config/diegops/infisical-client-secret"   # must be chmod 600
+# client_secret_command = ["secret-tool", "lookup", "service", "infisical", "account", "diegops"]
+
+# Optional: send one "mount" (the first path segment) to another project, environment or folder.
+# By default, path "work/ssh" lives in folder "/work/ssh" of the default project.
+# [[infisical.mounts]]
+# mount = "work"
+# folder = "/work"
+# project_id = "<other-project-id>"
+# environment = "prod"
+```
+
+Unknown keys are rejected, so a typo gives you a clear error instead of being silently ignored.
+
+### Step 5. First commands
+
+```console
+$ diegops kv backend
+backend: infisical
+config:  /home/you/.config/diegops/config.toml
+
+$ printf 'hello' > /tmp/demo.txt
+$ diegops kv put demo/hello GREETING=@/tmp/demo.txt
+wrote 1 key(s) to 'demo/hello' (infisical)
+
+$ diegops kv get demo/hello                 # key names only
+GREETING
+
+$ diegops kv get demo/hello --key GREETING  # one value, raw, to stdout
+hello
+```
+
+In the Infisical UI you will now see the folder `/demo/hello` with the secret `GREETING` in `prod`. Delete it there when you are done.
+
+Now back up real files:
+
+```console
+$ diegops secrets init
+Created: /home/you/.diegops/secrets.yaml
+Edit the file to add your secrets folders, then run `diegops secrets push`.
+
+$ diegops secrets push
+$HOME/.ssh
+  PUSH  id_ed25519
+  PUSH  id_ed25519.pub
+  PUSH  config
+
+Done: 3 pushed, 0 unchanged, 0 failed
+```
 
 ---
 
-## Commands at a Glance
+## Which backend should I use?
 
+```mermaid
+flowchart TD
+    Q1{Do you already run<br/>Vault or OpenBao?} -- yes --> Q2{Should these secrets<br/>live there long-term?}
+    Q2 -- yes --> V[Use backend = 'vault']
+    Q2 -- no --> M[Use Infisical, then<br/>diegops kv migrate]
+    Q1 -- no --> Q3{Must secrets stay on<br/>your own hardware?}
+    Q3 -- yes --> S[Self-host OpenBao<br/>see docs/secrets-backends.md]
+    Q3 -- no --> I[Use the Infisical Cloud<br/>free tier: the default]
 ```
-diegops version              Print version
-diegops update               Self-update to latest release
-diegops cadi                 Show the DiegOps hero screen
-diegops help                 Show help
-diegops bootstrap            Full workstation setup in one shot
-diegops shell ...            Set up shell environment (zsh, plugins, config)
 
-diegops repo ...             Manage git repository workspace
-diegops vault ...            Pull Vault secrets into .env files
-diegops secrets ...          Sync workstation files via Vault
-diegops auth ...             Manage authentication tokens
-diegops devtools ...         Developer workstation setup (git, gpg, ssh)
-diegops sync ...             Cloud-sync config files to GitHub
-diegops tool ...             Manage DevOps CLI tools
-diegops ktool ...            Manage and run ktool (karluiz tools)
+`diegops` picks the backend in this order: the `--backend` flag, then `$DIEGOPS_SECRETS_BACKEND`, then `backend` in `config.toml`, then `infisical`.
 
-diegops <tool> <args>        Run a managed tool (gh, vault, terraform, etc.)
+## Alternative: Vault or OpenBao (self-hosted)
+
+`diegops` speaks the Vault **KV v2** HTTP API, which both [OpenBao](https://openbao.org) and [HashiCorp Vault](https://developer.hashicorp.com/vault) implement.
+
+```toml
+backend = "vault"
+
+[vault]
+address   = "https://bao.example.com"     # no built-in default
+namespace = "personal"                     # optional (sent as X-Vault-Namespace)
+# ca_cert   = "~/.config/diegops/openbao-ca.pem"   # extra CA for a private PKI
+# token_file = "~/.vault-token"            # default; written by `bao login` / `vault login`
 ```
+
+```sh
+bao login -method=oidc          # or: vault login -method=oidc  (writes ~/.vault-token)
+diegops kv backend              # backend: vault
+diegops kv list secret          # sub-paths of the mount "secret"
+```
+
+`VAULT_ADDR`, `VAULT_NAMESPACE`, `VAULT_CACERT` and `VAULT_TOKEN` in the environment **override** the file. See [Troubleshooting](#troubleshooting).
+
+To use the other backend for a single command without changing the config, pass `--backend`: `diegops kv --backend vault list secret`. The flag also works after the subcommand: `diegops kv list secret --backend vault`.
 
 ---
 
-## `diegops bootstrap` — Full Workstation Setup
+## secrets.yaml explained
 
-Set up a fresh workstation with a single command. Verifies authentication, pulls cloud config, clones repositories, injects secrets, and restores workstation files.
+`~/.diegops/secrets.yaml` lists which local folders are backed up and where they go. You can point to another file with `--config <file>` or `$DIEGOPS_SECRETS_CONFIG`.
 
+```yaml
+folders:
+  - dest: $HOME/.ssh              # local folder ($HOME works on Linux, macOS and WSL)
+    vault_path: workstation/ssh   # logical path <mount>/<path> in the backend
+                                  #   Infisical: folder /workstation/ssh
+                                  #   Vault/OpenBao: mount "workstation", path "ssh"
+    dir_mode: "0700"              # folder permissions (default 0700)
+    keys:                         # each file becomes one key
+      - name: id_ed25519
+        mode: "0600"              # optional; default 0600 (*.pub files get 0644)
+      - name: id_ed25519.pub
+      - name: config
+
+  - dest: $HOME/.kube
+    vault_path: workstation/kube
+    keys: "*"                     # every file in the folder (push) or every key (pull)
 ```
-diegops bootstrap
+
+- File contents are base64-encoded before upload, so binary files such as keystores and GPG keys are fine.
+- `push` only uploads files that changed, and it merges with what is already stored, so other keys are kept.
+- `pull` writes a `.bak` copy before overwriting a file that differs.
+- `diegops secrets update` adds `CLAUDE.md` and `AGENTS.md` files found in your `repos.yaml` targets.
+
+## Daily workflows
+
+### Restore a new machine
+
+```mermaid
+sequenceDiagram
+    actor You
+    participant D as diegops
+    participant C as config.toml + secret file
+    participant I as Infisical
+    participant FS as Local disk
+    You->>D: diegops secrets pull
+    D->>C: read project, client ID, client secret
+    D->>I: Universal Auth login
+    I-->>D: short-lived access token
+    loop each folder in secrets.yaml
+        D->>I: GET secrets at vault_path
+        I-->>D: keys (base64 file contents)
+        D->>FS: decode, keep .bak if different, write with 0600/0644
+    end
+    D-->>You: Done: N written (M backed up), K unchanged, 0 failed
 ```
 
-**What it does (in order):**
+```sh
+# 1. Install diegops (above), then recreate config.toml and the client secret (Steps 3 and 4)
+diegops auth gh login <PAT>   # GitHub token, for sync and repo
+diegops sync pull             # brings back ~/.diegops/secrets.yaml and the other configs
+diegops secrets pull          # restores the files
+# or all at once:
+diegops bootstrap             # same as: diegops all pull
+```
 
-1. Checks GitHub CLI is authenticated
-2. Checks Vault CLI is authenticated
-3. Pulls config files from cloud (`sync pull`)
-4. Clones all configured repositories (`repo apply`)
-5. Injects `.env` secrets from Vault (`vault apply`)
-6. Restores workstation files from Vault (`secrets pull`)
-7. Configures shell environment (`shell init`)
+### Back up a new file
 
-Finishes with the hero banner and a per-step summary. If any execution step fails, it continues with the remaining steps and reports all failures at the end.
+Add it to `secrets.yaml` (a new `- name:` entry or a new folder), then run:
 
-**Requires:** GitHub token (`diegops auth gh login` first) and Vault session (`vault login` first).
+```sh
+diegops secrets push --path ~/.ssh   # only folders under this path
+diegops sync push                    # back up the edited secrets.yaml itself
+```
+
+### Check status
+
+```console
+$ diegops secrets status
+$HOME/.ssh
+  SYNCED      id_ed25519
+  DIFFERS     config
+  LOCAL_ONLY  id_rsa_old
+```
+
+| Status | Meaning |
+|---|---|
+| `SYNCED` | Same on both sides |
+| `DIFFERS` | Changed locally or in the backend |
+| `LOCAL_ONLY` | Not uploaded yet |
+| `VAULT_ONLY` | Only in the backend (the name is historical; it applies to Infisical too) |
+
+### Migrate from Vault/OpenBao to Infisical
+
+```mermaid
+flowchart TD
+    P[Plan: list source recursively,<br/>map paths, check key names and collisions] --> E{Problems?}
+    E -- yes --> X[Abort: nothing written]
+    E -- no --> DR[--dry-run: print PLAN lines and counts]
+    DR --> W[Real run: write only new or changed keys]
+    W --> V[Re-read both sides,<br/>compare SHA-256 per key]
+    V -- all OK --> R[Re-run with --dry-run:<br/>0 to create, 0 to update]
+    V -- MISMATCH --> F[Exit non-zero:<br/>do NOT delete the source]
+```
+
+```sh
+diegops kv migrate secret workstation --dry-run   # mounts or path prefixes
+diegops kv migrate secret workstation             # every line must say OK
+diegops kv migrate secret workstation --dry-run   # expect 0 to create, 0 to update
+```
+
+The migration never deletes anything and never prints values. For the full checklist, see [docs/infisical-migration-runbook.md](docs/infisical-migration-runbook.md).
 
 ---
 
-## `diegops repo` — Workspace Management
+## Troubleshooting
 
-Clone and manage a set of git repositories defined in a YAML config file.
+| Symptom | Cause and fix |
+|---|---|
+| `kv migrate` shows the wrong source, or prints `warning: VAULT_ADDR env overrides the [vault] config value` | `VAULT_ADDR` or `VAULT_NAMESPACE` set in your shell (for example old `.zshrc` lines) wins over `config.toml`. Run `unset VAULT_ADDR VAULT_NAMESPACE` and remove the exports. |
+| `no Vault address configured` | Set `[vault] address`. There is no built-in default. |
+| `no Vault token: ...` | Run `bao login -method=oidc` or `vault login`, or set `VAULT_TOKEN`. |
+| `no Infisical credentials` or `no Infisical client secret` | Set `client_id` and one of `client_secret_file`, `client_secret_command` or `$INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET`. |
+| `... must not be accessible by group/others (chmod 600)` | Run `chmod 600 ~/.config/diegops/infisical-client-secret`. |
+| `no secret at '<path>'` or `FAIL  key '<k>' not found at '<path>'` | Wrong backend, project, environment or path. Check `diegops kv backend`, `diegops kv list <mount>`, the `environment` slug, and that the identity was added to the project. |
+| `listing the root is not supported` | `kv list /` is not allowed. Pass a mount instead: `diegops kv list workstation`. |
+| Slow runs, HTTP 429 | Free-tier rate limits. `diegops` retries automatically and honours `Retry-After`, so just wait. Re-running is safe. |
+| Migrate aborts on an invalid key name | Infisical key names cannot contain `:` or `/`. Rename the key at the source. |
+| `client_secret_command '...' exited with ...` | The keyring is locked (common over SSH). Unlock it, or use the file option. |
+| Restored SSH or GPG keys ask for a passphrase | `diegops` restores files byte for byte, so the passphrase is still yours to type. Run `ssh-add`, or `gpg-connect-agent reloadagent /bye` for GPG. |
 
-```
-diegops repo init                          Create sample config at ~/.diegops/repos.yaml
-diegops repo apply [--path P] [--config F] Clone all missing repos (idempotent)
-diegops repo list [--config F]             Show repos already cloned locally
-diegops repo list-diff [--config F]        Show repos in config but not yet cloned
-```
+## Security notes
 
-**Config** (`~/.diegops/repos.yaml`):
+- **Values never go on the command line.** `kv put KEY=value` is refused. Use `KEY=@file` or `KEY=-` (stdin) so nothing lands in shell history or the process list.
+- **Nothing secret is printed.** Output shows paths, key names and counts only. The one exception is `kv get --key K`, which you ask for explicitly.
+- **Multi-line or whitespace-sensitive values** (PEM keys, values with trailing newlines) are stored in Infisical as `diegops:b64:<base64>`, because Infisical trims values. `diegops` decodes them for you; don't edit those values in the UI.
+- Infisical credential order: `INFISICAL_TOKEN`, then `INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET`, then `client_secret_command`, then `client_secret_file` (which must be `0600`).
+- Infisical Free has no secret versioning, so keep an **encrypted offline backup** (for example with `age`) of keys you cannot regenerate.
+- The `sync` repo holds no secrets but may hold hostnames and paths. Keep it **private**.
+
+## Command reference
+
+| Command | What it does |
+|---|---|
+| `diegops version` / `diegops update` | Show the version / self-update |
+| `diegops bootstrap` | Full new-machine setup (same as `all pull`) |
+| `diegops all pull` | sync pull → SSH keys → repo apply → vault apply → secrets pull → shell init |
+| `diegops all push` | secrets push → sync push |
+| `diegops kv [--backend B] backend` | Show the selected backend and config file |
+| `diegops kv list <mount/path>` | List sub-paths |
+| `diegops kv get <path> [--key K]` | Key names, or one raw value |
+| `diegops kv put <path> K=@file` or `K=-` | Upsert keys (inline values are refused) |
+| `diegops kv migrate <prefix>... [--from vault] [--to infisical] [--dry-run]` | Copy, then verify by SHA-256 |
+| `diegops secrets init/push/pull/status/update` | Back up or restore the files in `secrets.yaml` (`--path`, `--config`) |
+| `diegops vault init/apply/list/list-diff` | Write project `.env` files from the backend |
+| `diegops repo init/apply/list/list-diff` | Clone the repos in `repos.yaml` |
+| `diegops sync push/pull/status` | Back up `~/.diegops/` to a private GitHub repo |
+| `diegops auth gh login <PAT>/logout/whoami`, `diegops auth status` | GitHub token |
+| `diegops tool list/install/update/remove`, `diegops <tool> ...` | Managed DevOps CLIs |
+| `diegops ktool update`, `diegops ktool <args>` | Karluiz tools |
+| `diegops shell init` | zsh, oh-my-zsh and the managed shell config |
+| `diegops devtools git/gpg/ssh ...` | Git identity, GPG signing, SSH keys |
+
+Environment variables: `DIEGOPS_CONFIG`, `DIEGOPS_SECRETS_BACKEND`, `DIEGOPS_SECRETS_CONFIG`, `DIEGOPS_REPOS_CONFIG`, `DIEGOPS_PROFILE`, `INFISICAL_API_URL`, `INFISICAL_TOKEN`, `INFISICAL_UNIVERSAL_AUTH_CLIENT_ID`, `INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET`, `VAULT_ADDR`, `VAULT_NAMESPACE`, `VAULT_CACERT`, `VAULT_TOKEN`.
+
+---
+
+## Other commands
+
+### `diegops repo`: workspace
+
+`~/.diegops/repos.yaml` (override with `--config` or `$DIEGOPS_REPOS_CONFIG`):
 
 ```yaml
 targets:
@@ -181,263 +465,61 @@ targets:
       - git@github.com:my-org/api-service.git
 ```
 
-```sh
-diegops repo init          # create sample config
-diegops repo apply         # clone everything
-diegops repo list-diff     # see what's missing
-```
+`diegops repo init` creates a sample file, `repo apply` clones whatever is missing (safe to re-run), and `repo list-diff` shows what is missing.
 
-> Override config path with `--config <path>` or `$DIEGOPS_REPOS_CONFIG`.
+### `diegops vault`: `.env` files
 
----
-
-## `diegops kv` — Secrets Backend (Infisical default, Vault/OpenBao)
-
-```sh
-diegops kv backend                         # which backend + config file
-diegops kv list dpinto-config              # sub-paths
-diegops kv get dpinto-config/kube          # key names only
-diegops kv get dpinto-config/kube --key K  # one raw value to stdout
-diegops kv put dpinto-config/app TOKEN=- < token.txt   # or KEY=@file
-diegops kv migrate dpinto-config dpinto-work --dry-run # Vault/OpenBao -> Infisical
-```
-
-Configured in `~/.config/diegops/config.toml` (no built-in addresses). Design:
-[docs/secrets-backends.md](docs/secrets-backends.md); migration:
-[docs/infisical-migration-runbook.md](docs/infisical-migration-runbook.md).
-
-## `diegops vault` — Secret Management
-
-Pull secrets from HashiCorp Vault KV v2 and write `.env` files.
-
-```
-diegops vault init                          Create sample config at ~/.diegops/repo-vault.yaml
-diegops vault apply [--path P] [--config F] Pull secrets and write .env files (idempotent)
-diegops vault list [--config F]             Show targets with .env files
-diegops vault list-diff [--config F]        Show targets missing .env files
-```
-
-**Config** (`~/.diegops/repo-vault.yaml`):
+Despite its name, this command works with **whichever backend is selected**. Configure it in `~/.diegops/repo-vault.yaml`:
 
 ```yaml
 targets:
   - path: $HOME/github/my-org/my-app
     secrets:
-      - vault_path: secret/my-app/database
+      - vault_path: apps/my-app/database
         keys: [username, password]
-      - vault_path: secret/my-app/api
+      - vault_path: apps/my-app/api
         keys: "*"
 ```
 
-**Requires:** a configured secrets backend — Infisical (default) or Vault/OpenBao — see [docs/secrets-backends.md](docs/secrets-backends.md).
+`diegops vault apply` writes `.env` (`KEY="value"`), backs up the old file to `.env.bak`, and adds both to `.gitignore`.
 
-> `.env` files use `KEY="value"` format. `.gitignore` is auto-updated. Content-aware skip avoids unnecessary writes.
+### `diegops auth`
 
----
+Stores a GitHub token in `~/.diegops/tokens/gh.json` (mode 0600). The stored file wins over `$GITHUB_TOKEN`. `auth status` also shows the ktool kenv status.
 
-## `diegops auth` — Credential Management
+### `diegops sync`
 
-Manage authentication tokens for external services.
+The first `push` creates a private repo named `diegops-<github-user>-memory`. With `DIEGOPS_PROFILE=work` it uses `diegops-<github-user>-work-memory` instead. It syncs `~/.diegops/` except `tokens/` and `bin/`. `push` overwrites the cloud copy and `pull` overwrites the local one.
 
-```
-diegops auth gh login <PAT>     Validate and store a GitHub token
-diegops auth gh logout          Remove stored GitHub token
-diegops auth gh whoami          Show authenticated GitHub user and scopes
-diegops auth status             Show status for all providers (GitHub + ktool kenv)
-diegops auth logout             Remove all stored tokens
-```
+### `diegops tool`
 
-**Storage:** `~/.diegops/tokens/gh.json` (0600 permissions on Unix).
+Downloads DevOps CLIs into `~/.diegops/bin/`: `gh`, `vault`, `terraform`, `helm`, `k9s`, `kubectl`, `jq`, `yq`, `trivy` and `trippy`. Run them as `diegops jq ...`, or put `~/.diegops/bin` on your PATH (`shell init` does this).
 
-**Resolution order:** stored file > `$GITHUB_TOKEN` env var > unauthenticated.
+### `diegops ktool`
 
-> `auth status` also shows ktool's kenv token status (read-only from `~/.ktool/tokens/`).
+`diegops ktool update` installs [ktool](https://github.com/CaDi-Team/karluiz-tool-cli), and `diegops ktool <args>` forwards to it (for example `diegops ktool kenv list`).
 
----
+### `diegops shell init`
 
-## `diegops sync` — Cloud Config Backup
+Installs zsh (with apt, brew, rpm-ostree, dnf or apk), oh-my-zsh and plugins. It writes `~/.diegops/shell/diegops.zsh` (and a bash equivalent) and sources it from `~/.zshrc`. Safe to re-run.
 
-Back up and restore `~/.diegops/` config files to a private GitHub repo.
+### `diegops devtools`
+
+`git set [--name --email]`, `gpg init|set|restart` and `ssh list|config|create`. The identity comes from the flags, then `git config`, then the GitHub API.
+
+### Directory layout
 
 ```
-diegops sync push       Upload local configs to GitHub
-diegops sync pull       Download configs from GitHub
-diegops sync status     Show diff between local and cloud
-```
-
-**How it works:**
-- First `push` auto-creates a private repo `diegops-{your_github_username}-memory`
-- Set `DIEGOPS_PROFILE` to keep separate config sets (e.g. work vs personal machines): `DIEGOPS_PROFILE=work` syncs with `diegops-{your_github_username}-work-memory`. Export it in `~/.zshrc` on that machine, and pass it on first setup: `DIEGOPS_PROFILE=work diegops bootstrap`
-- Syncs all files in `~/.diegops/` **except** `tokens/` and `bin/` (security + size)
-- Uses GitHub Contents API — no local git clone needed
-- `push` overwrites cloud; `pull` overwrites local (explicit intent)
-- Content-aware skip: unchanged files are not re-uploaded/downloaded
-
-**Requires:** GitHub token (`diegops auth gh login` first).
-
-> **Privacy note:** The sync repo does not contain secrets or tokens (those go through Vault), but it may hold sensitive configuration such as hostnames, paths, and tool preferences. The repo is created as **private** — keep it that way.
-
----
-
-## `diegops tool` — Managed DevOps Toolbox
-
-Download, update, and run popular DevOps CLIs without installing them globally. All binaries live in `~/.diegops/bin/`.
-
-```
-diegops tool list               Show available tools and install status
-diegops tool install <name>     Install latest version of a tool
-diegops tool update             Update all installed tools
-diegops tool update <name>      Update a specific tool
-diegops tool remove <name>      Remove an installed tool
-diegops <tool> <args>           Run a managed tool directly
-```
-
-### Available Tools
-
-| Tool | Description | Config |
-|------|-------------|--------|
-| `gh` | GitHub CLI | `~/.config/gh/` |
-| `vault` | HashiCorp Vault | stateless (env vars) |
-| `terraform` | Infrastructure as code | `.terraform/` (per-project) |
-| `helm` | Kubernetes package manager | `~/.config/helm/` |
-| `k9s` | Kubernetes TUI | `~/.kube/` |
-| `kubectl` | Kubernetes CLI | `~/.kube/` |
-| `jq` | JSON processor | stateless |
-| `yq` | YAML processor | stateless |
-| `trivy` | Security scanner | `~/.cache/trivy/` |
-| `trippy` | Network diagnostic | stateless |
-
-### Examples
-
-```sh
-diegops tool list                    # see what's available
-diegops tool install jq              # install jq
-diegops jq '.name' package.json      # use it directly
-diegops tool install gh              # install GitHub CLI
-diegops gh pr list                   # use it
-diegops tool update                  # update everything
-```
-
-> Tools are downloaded from GitHub Releases (or vendor CDN for kubectl). Each tool's release asset naming is handled automatically.
-
----
-
-## `diegops ktool` — Karluiz Tools
-
-Manage and proxy the ktool CLI (karluiz tools) as a sidecar binary.
-
-```
-diegops ktool update        Download/update ktool to ~/.diegops/bin/ktool
-diegops ktool <args>        Forward args to the managed ktool binary
-```
-
-```sh
-diegops ktool update              # install/update ktool
-diegops ktool kenv list           # list kenv secrets
-diegops ktool auth kenv login T   # authenticate with kenv
-```
-
----
-
-## `diegops secrets` — Workstation File Sync via Vault
-
-Sync sensitive workstation files (SSH keys, kubeconfigs, etc.) through Vault KV v2.
-
-```
-diegops secrets init                          Create sample config at ~/.diegops/secrets.yaml
-diegops secrets push [--path P] [--config F] Upload local files to Vault
-diegops secrets pull [--path P] [--config F] Download files from Vault
-diegops secrets status [--config F]           Compare local vs Vault
-```
-
-**How it works:**
-- Files are base64-encoded when pushed to Vault and decoded when pulled
-- Smart permissions: `*.pub` files get `0644`, everything else `0600`, directories `0700`
-- `status` shows SYNCED / DIFFERS / LOCAL_ONLY / VAULT_ONLY per file
-- Existing files are backed up to `.bak` before overwrite
-
-**Requires:** a configured secrets backend — Infisical (default) or Vault/OpenBao — see [docs/secrets-backends.md](docs/secrets-backends.md).
-
-> Override config path with `--config <path>` or `$DIEGOPS_SECRETS_CONFIG`.
-
----
-
-## `diegops shell` — Shell Environment Setup
-
-Set up a fully working shell environment from scratch. Idempotent — safe to run repeatedly.
-
-```
-diegops shell init       Install zsh, oh-my-zsh, plugins, and write managed config
-```
-
-**What it does (in order):**
-
-1. Installs zsh if missing (detects apt, brew, rpm-ostree, dnf, apk)
-2. Sets zsh as the default shell
-3. Installs oh-my-zsh if missing
-4. Clones custom plugins (zsh-autosuggestions, zsh-syntax-highlighting)
-5. Writes managed config to `~/.diegops/shell/diegops.zsh`
-6. Injects `source` line at the end of `~/.zshrc`
-7. Sets up bash equivalent (`~/.diegops/shell/diegops.bash`)
-
-**Managed config includes:**
-- Oh-my-zsh with plugins: git, kubectl, docker, terraform, helm, gh, ansible, colored-man-pages, command-not-found, zsh-autosuggestions, zsh-syntax-highlighting
-- `~/.diegops/bin/` added to PATH (managed tools)
-- Automatic kubeconfig discovery from `~/.kube/`
-- Standard aliases and environment variables
-
-**How it works:** The managed config is loaded last from `~/.zshrc`, so it takes priority. Machine-specific overrides go after the source line in your `.zshrc`. The managed files live in `~/.diegops/shell/` and are automatically synced via `diegops sync`.
-
----
-
-## `diegops devtools` — Developer Workstation Setup
-
-Automate identity and tooling configuration for a fresh workstation.
-
-**Identity resolution:** `--name`/`--email` flags > `git config` values > GitHub API (`gh`).
-
-### git
-
-```
-diegops devtools git set [--name NAME] [--email EMAIL]
-```
-
-Sets `git config --global user.name` and `user.email`.
-
-### gpg
-
-```
-diegops devtools gpg init [--name NAME] [--email EMAIL]   Generate GPG identity config
-diegops devtools gpg set                                   Full setup: key + GitHub + signing
-diegops devtools gpg restart                               Restart gpg-agent
-```
-
-### ssh
-
-```
-diegops devtools ssh list                                   List local + GitHub SSH keys
-diegops devtools ssh config                                 Print ~/.ssh/config
-diegops devtools ssh create [--name N] [--type T] [--email E]   Create SSH key
-```
-
----
-
-## `diegops cadi`
-
-Displays the DiegOps hero screen with ASCII art branding. No arguments, no side effects.
-
----
-
-## Directory Layout
-
-```
+~/.config/diegops/
+├── config.toml                # backend selection and IDs (no secrets)
+└── infisical-client-secret    # optional, 0600
 ~/.diegops/
-├── bin/                 # Managed tool binaries (ktool, gh, jq, etc.)
-├── shell/               # Managed shell config (diegops.zsh, diegops.bash)
-├── tokens/              # Auth tokens (gh.json) — 0600 permissions
-├── repos.yaml           # Repository workspace config
-├── repo-vault.yaml      # Vault secrets config
-└── secrets.yaml         # Workstation file sync config
+├── bin/                       # managed tools
+├── shell/                     # managed shell config
+├── tokens/                    # gh.json (0600, never synced)
+├── repos.yaml
+├── repo-vault.yaml
+└── secrets.yaml
 ```
 
 ---
@@ -446,13 +528,9 @@ Displays the DiegOps hero screen with ASCII art branding. No arguments, no side 
 
 A huge shout-out and all credit where it truly belongs: to my good friend **[Karluiz](https://karluiz.com/)**.
 
-The `diegops ktool` command and everything it wraps exist because Karluiz built the actual tools. This CLI is just a thin shell to make his work fit into a DevOps-native workflow — the real engineering, the ideas, and the hard work behind those tools are **100% his**. I refuse to take credit for what he created, and I want anyone reading this to know exactly who made it possible.
+The `diegops ktool` command and everything it wraps exist because Karluiz built the actual tools. This CLI is just a thin shell to make his work fit into a DevOps-native workflow. The real engineering, the ideas and the hard work behind those tools are **100% his**.
 
-Karluiz is a developer who has been coding since age 7 on a Commodore 64 — over 30 years of passion poured into every project. His site is a love letter to that journey: retro pixel aesthetics, 8-bit RPG mini-games, and a growing collection of free developer tools that he builds and shares with the community. From CRM systems to hotel management platforms to his suite of ktools, everything he ships is built with genuine passion and generosity.
-
-**His tools are free.** Go check them out, explore his projects, read his blog, and see what a developer driven by pure love for the craft looks like:
-
-**[karluiz.com](https://karluiz.com/)**
+Karluiz has been coding since age 7 on a Commodore 64, and he has poured over 30 years of passion into his projects: retro pixel aesthetics, 8-bit RPG mini-games, and a growing collection of **free** developer tools. Go check them out at **[karluiz.com](https://karluiz.com/)**.
 
 <p align="center">
   <a href="https://karluiz.com/">
@@ -462,13 +540,7 @@ Karluiz is a developer who has been coding since age 7 on a Commodore 64 — ove
 
 > *"Every line of code is written with the same passion I felt at age 7."* — Karluiz
 
-Thank you, Karluiz. This project wouldn't have the `ktool` integration without your work. Readers: do yourself a favor and visit his page — you won't regret it.
-
----
-
 ## Acknowledgements — Open Source Tools
-
-`diegops tool` wouldn't exist without the incredible open-source projects it wraps. These tools are built and maintained by talented people and teams who share their work freely with the community. If you find them useful through `diegops`, consider using them directly, starring their repos, and supporting their maintainers.
 
 | Tool | Project | Maintainers |
 |------|---------|-------------|
@@ -478,36 +550,19 @@ Thank you, Karluiz. This project wouldn't have the `ktool` integration without y
 | **helm** | [helm/helm](https://github.com/helm/helm) | The Helm Authors (CNCF) |
 | **k9s** | [derailed/k9s](https://github.com/derailed/k9s) | Fernand Galiana |
 | **kubectl** | [kubernetes/kubectl](https://github.com/kubernetes/kubectl) | The Kubernetes Authors (CNCF) |
-| **jq** | [jqlang/jq](https://github.com/jqlang/jq) | The jq community (originally Stephen Dolan) |
+| **jq** | [jqlang/jq](https://github.com/jqlang/jq) | The jq community |
 | **yq** | [mikefarah/yq](https://github.com/mikefarah/yq) | Mike Farah |
 | **trivy** | [aquasecurity/trivy](https://github.com/aquasecurity/trivy) | Aqua Security |
 | **trippy** | [fujiapple852/trippy](https://github.com/fujiapple852/trippy) | FujiApple |
 
-Thank you all for making these tools available. `diegops` simply downloads and manages your binaries — the real value is in the tools themselves.
-
----
+Thanks also to [Infisical](https://infisical.com) and [OpenBao](https://openbao.org).
 
 ## Development
 
-### Prerequisites
-
-- [Rust stable](https://rustup.rs)
-
-### Build & Test
-
 ```sh
-cargo build                     # debug build
-cargo build --release           # release build
-cargo test                      # run all tests
-cargo fmt --check               # formatting gate
-cargo clippy -- -D warnings     # lint gate
+cargo build && cargo test
+cargo fmt --check
+cargo clippy -- -D warnings
 ```
 
-### Cutting a Release
-
-```sh
-git tag v1.2.3
-git push origin v1.2.3
-```
-
-GitHub Actions builds all platform binaries and publishes a GitHub Release. All builds run on self-hosted runners (`ubuntu-latest`). Cross-compilation uses `cargo-zigbuild`.
+To release, push a `vX.Y.Z` tag from `develop`. GitHub Actions builds every target (cross-compiled with `cargo-zigbuild`) and publishes the release.
