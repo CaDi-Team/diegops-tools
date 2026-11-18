@@ -83,6 +83,9 @@ pub fn migrate(
         let Some(data) = src.get(&path)? else {
             continue;
         };
+        for k in data.keys() {
+            dst.validate_key(k).map_err(|e| format!("{path}: {e}"))?;
+        }
         let current = dst.get(&path)?.unwrap_or_default();
         let (want, have) = (digests(&data), digests(&current));
         let mut report = PathReport {

@@ -57,6 +57,12 @@ impl SecretsBackend for Mem {
         }
         Ok(())
     }
+    fn validate_key(&self, key: &str) -> Result<(), BoxError> {
+        if self.sanitize && key.contains(':') {
+            return Err(format!("bad key '{key}'").into());
+        }
+        Ok(())
+    }
     fn location_id(&self, path: &str) -> Result<String, BoxError> {
         Ok(if self.sanitize {
             path.replace('.', "_")
@@ -174,4 +180,18 @@ fn report_never_contains_values() {
         assert!(!text.contains(v), "report leaked {v}: {text}");
     }
     assert!(text.contains("dpinto-config/app/env"));
+}
+
+#[test]
+fn invalid_target_key_aborts_before_any_write() {
+    let src = Mem::with(&[("m/a", &[("ok", "1")]), ("m/b", &[("bad:key", "2")])]);
+    let dst = Mem {
+        sanitize: true,
+        ..Mem::default()
+    };
+    let err = migrate(&src, &dst, &["m".to_string()], false)
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("bad:key"), "{err}");
+    assert_eq!(*dst.writes.borrow(), 0);
 }

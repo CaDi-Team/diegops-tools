@@ -262,3 +262,13 @@ fn location_id_identifies_project_env_and_folder() {
         "proj-work/prod:/gpg"
     );
 }
+
+#[test]
+fn rejects_keys_infisical_cannot_store() {
+    let server = mockito::Server::new();
+    let b = backend(&server);
+    assert!(b.validate_key("id_ed25519.pub").is_ok());
+    for bad in ["a:b", "a/b", " lead", "trail ", ""] {
+        assert!(b.validate_key(bad).is_err(), "{bad:?}");
+    }
+}

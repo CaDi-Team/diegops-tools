@@ -29,6 +29,10 @@ pub trait SecretsBackend {
     fn list(&self, path: &str) -> Result<Vec<String>, BoxError>;
     /// Upserts `data` at `path`; keys not in `data` are left untouched.
     fn put(&self, path: &str, data: &SecretMap) -> Result<(), BoxError>;
+    /// Rejects key names this backend cannot store verbatim.
+    fn validate_key(&self, _key: &str) -> Result<(), BoxError> {
+        Ok(())
+    }
     /// Identifier of the physical location `path` maps to (collision checks).
     fn location_id(&self, path: &str) -> Result<String, BoxError> {
         Ok(path.to_string())

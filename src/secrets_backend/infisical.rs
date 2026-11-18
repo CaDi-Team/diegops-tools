@@ -278,6 +278,16 @@ impl SecretsBackend for InfisicalBackend {
         }
     }
 
+    fn validate_key(&self, key: &str) -> Result<(), BoxError> {
+        if key.is_empty() || key != key.trim() || key.contains(':') || key.contains('/') {
+            return Err(format!(
+                "key '{key}' is not valid in Infisical (no ':' or '/', no surrounding spaces)"
+            )
+            .into());
+        }
+        Ok(())
+    }
+
     fn location_id(&self, path: &str) -> Result<String, BoxError> {
         Ok(describe(&self.settings.mapping.locate(path)?))
     }
