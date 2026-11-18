@@ -1,5 +1,9 @@
 # Runbook: personal secrets from OpenBao to Infisical Cloud
 
+Examples use the mounts `dpinto-config` and `dpinto-work`; replace them with your own.
+If `VAULT_ADDR`/`VAULT_NAMESPACE` are exported in your shell they override `[vault]`
+in `config.toml`: run `unset VAULT_ADDR VAULT_NAMESPACE` first.
+
 Never paste a client secret, token or secret value into chat, an issue or a
 commit. Every `diegops` command below prints paths and counts, never values.
 
@@ -7,7 +11,7 @@ commit. Every `diegops` command below prints paths and counts, never values.
 
 1. Sign up at <https://app.infisical.com> (US region) or
    <https://eu.infisical.com> (EU region). Enable 2FA.
-2. Create the organisation, for example `dpinto`. Then create a Secrets Management
+2. Create the organisation (any name). Then create a Secrets Management
    project called **`personal`**.
 3. Environments: keep only **`prod`** in use. The Free tier allows 3, and the
    default `dev`/`staging` can be left empty.
@@ -27,9 +31,13 @@ commit. Every `diegops` command below prints paths and counts, never values.
    - Preferred, using the OS keyring:
      `secret-tool store --label "Infisical diegops" service infisical account diegops`
      and paste the secret at the prompt.
-   - Fallback: run `install -m 600 /dev/null ~/.config/diegops/infisical-client-secret`,
-     then paste the secret into that file with an editor.
+   - Fallback, a private file (the secret never reaches shell history):
+     ```sh
+     install -m 600 /dev/null ~/.config/diegops/infisical-client-secret
+     read -rs -p "Client secret: " S && printf '%s' "$S" > ~/.config/diegops/infisical-client-secret; unset S; echo
+     ```
 9. Write `~/.config/diegops/config.toml` as shown in
+   [the README](../README.md#step-4-write-the-config-file) and
    [secrets-backends.md](secrets-backends.md), with `project_id`, `client_id`, the
    `client_secret_command` or `client_secret_file` line, and the `[vault]` table
    pointing at OpenBao with `namespace = "personal"`.

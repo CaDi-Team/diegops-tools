@@ -1,11 +1,14 @@
 # Secrets backends: Infisical by default, Vault/OpenBao optional
 
+> Looking for setup steps? Start with the [README quick start](../README.md#quick-start-secrets-in-5-minutes-with-infisical-cloud).
+> This page is the design record: how backends are selected, how paths map, and why.
+
 Status: accepted · Date: 2026-11-18
 
 ## Context
 
 `diegops` read and wrote secrets by shelling out to the `vault` CLI. The
-address (`https://cadi-vault.cadi-labs.com`) was hard-coded in the managed shell
+Vault address was hard-coded in the managed shell
 config, and every command needed `VAULT_ADDR` plus a live Vault session. The
 personal secrets (`dpinto-config/…` for `secrets`/`vault` and `dpinto-work/…` for
 gnupg, ssh and sops-age keys) are moving off the company OpenBao to a personal
@@ -94,19 +97,45 @@ backend = "infisical"
 
 [infisical]
 # site_url = "https://eu.infisical.com"   # if the org is in the EU region
-project_id = "<personal project id>"
+project_id = "<your-project-id>"
 environment = "prod"
-client_id = "<machine identity client id>"
-client_secret_command = ["secret-tool", "lookup", "service", "infisical", "account", "diegops"]
-# client_secret_file = "~/.config/diegops/infisical-client-secret"   # chmod 600
+client_id = "<your-machine-identity-client-id>"
+client_secret_file = "~/.config/diegops/infisical-client-secret"   # chmod 600
+# client_secret_command = ["secret-tool", "lookup", "service", "infisical", "account", "diegops"]
 
 # Optional per-mount overrides (default folder is /<mount>)
 # [[infisical.mounts]]
-# mount = "dpinto-work"
+# mount = "work"
 # folder = "/work"
 
 [vault]   # only for --backend vault and for `kv migrate`
-address = "https://<openbao address>"
+address = "https://bao.example.com"
 namespace = "personal"
 # ca_cert = "~/.config/diegops/openbao-ca.pem"
 ```
+
+## Architecture
+
+```mermaid
+flowchart LR
+    CMD["secrets / vault / all / kv"] --> SEL["select_kind:<br/>--backend > env > config > infisical"]
+    SEL --> T{{"SecretsBackend trait<br/>get / list / put"}}
+    T --> I["InfisicalBackend<br/>Universal Auth, v4 secrets API"]
+    T --> V["VaultBackend<br/>KV v2, token + namespace"]
+    I --> C["codec: diegops:b64: for<br/>multi-line / whitespace values"]
+```
+
+## Environment variable overrides
+
+| Variable | Overrides |
+|---|---|
+| `DIEGOPS_CONFIG` | config file path |
+| `DIEGOPS_SECRETS_BACKEND` | `backend` |
+| `INFISICAL_API_URL` | `[infisical] site_url` |
+| `INFISICAL_TOKEN` | all Infisical credentials (pre-issued access token) |
+| `INFISICAL_UNIVERSAL_AUTH_CLIENT_ID` | `[infisical] client_id` |
+| `INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET` | `client_secret_command` / `client_secret_file` |
+| `VAULT_ADDR`, `VAULT_NAMESPACE`, `VAULT_CACERT` | `[vault] address`, `namespace`, `ca_cert` |
+| `VAULT_TOKEN` | `[vault] token_file` (default `~/.vault-token`) |
+
+`kv migrate` prints a warning when `VAULT_ADDR` or `VAULT_NAMESPACE` differ from the config file.
