@@ -67,7 +67,10 @@ fn default_path_honours_env_then_xdg_then_home() {
 #[test]
 fn infisical_is_the_default_backend() {
     let cfg = Config::default();
-    assert_eq!(select_kind(&cfg, None, &env_of(&[])).unwrap(), BackendKind::Infisical);
+    assert_eq!(
+        select_kind(&cfg, None, &env_of(&[])).unwrap(),
+        BackendKind::Infisical
+    );
 }
 
 #[test]
@@ -75,7 +78,10 @@ fn backend_precedence_flag_then_env_then_file() {
     let cfg = parse("backend = \"infisical\"").unwrap();
     let env = env_of(&[("DIEGOPS_SECRETS_BACKEND", "vault")]);
     assert_eq!(select_kind(&cfg, None, &env).unwrap(), BackendKind::Vault);
-    assert_eq!(select_kind(&cfg, Some("infisical"), &env).unwrap(), BackendKind::Infisical);
+    assert_eq!(
+        select_kind(&cfg, Some("infisical"), &env).unwrap(),
+        BackendKind::Infisical
+    );
     assert!(select_kind(&cfg, Some("consul"), &env).is_err());
 }
 
@@ -123,7 +129,10 @@ fn infisical_defaults_to_cloud_and_universal_auth_from_env() {
     let s = resolve_infisical(&cfg, &env).unwrap();
     assert_eq!(s.site_url, "https://app.infisical.com");
     match s.auth {
-        InfisicalAuth::UniversalAuth { client_id, client_secret } => {
+        InfisicalAuth::UniversalAuth {
+            client_id,
+            client_secret,
+        } => {
             assert_eq!(client_id, "cid");
             assert_eq!(client_secret, "csecret");
         }
@@ -134,7 +143,10 @@ fn infisical_defaults_to_cloud_and_universal_auth_from_env() {
 #[test]
 fn infisical_access_token_env_wins() {
     let cfg = Config::default();
-    let env = env_of(&[("INFISICAL_TOKEN", "at"), ("INFISICAL_API_URL", "https://eu.infisical.com/")]);
+    let env = env_of(&[
+        ("INFISICAL_TOKEN", "at"),
+        ("INFISICAL_API_URL", "https://eu.infisical.com/"),
+    ]);
     let s = resolve_infisical(&cfg, &env).unwrap();
     assert_eq!(s.site_url, "https://eu.infisical.com");
     assert!(matches!(s.auth, InfisicalAuth::AccessToken(ref t) if t == "at"));
@@ -143,8 +155,14 @@ fn infisical_access_token_env_wins() {
 #[test]
 fn infisical_without_credentials_is_a_clear_error() {
     let cfg = Config::default();
-    let err = resolve_infisical(&cfg, &env_of(&[])).err().unwrap().to_string();
-    assert!(err.contains("client_id") || err.contains("INFISICAL"), "{err}");
+    let err = resolve_infisical(&cfg, &env_of(&[]))
+        .err()
+        .unwrap()
+        .to_string();
+    assert!(
+        err.contains("client_id") || err.contains("INFISICAL"),
+        "{err}"
+    );
 }
 
 #[cfg(unix)]
@@ -164,7 +182,9 @@ fn client_secret_file_must_be_private() {
     assert!(resolve_infisical(&cfg, &env_of(&[])).is_err());
     std::fs::set_permissions(&f, std::fs::Permissions::from_mode(0o600)).unwrap();
     let s = resolve_infisical(&cfg, &env_of(&[])).unwrap();
-    assert!(matches!(s.auth, InfisicalAuth::UniversalAuth { ref client_secret, .. } if client_secret == "csecret"));
+    assert!(
+        matches!(s.auth, InfisicalAuth::UniversalAuth { ref client_secret, .. } if client_secret == "csecret")
+    );
     std::fs::remove_dir_all(&dir).unwrap();
 }
 

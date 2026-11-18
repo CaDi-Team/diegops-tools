@@ -16,7 +16,9 @@ impl Mem {
         for (p, kv) in entries {
             m.data.borrow_mut().insert(
                 p.to_string(),
-                kv.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+                kv.iter()
+                    .map(|(k, v)| (k.to_string(), v.to_string()))
+                    .collect(),
             );
         }
         m
@@ -56,14 +58,27 @@ impl SecretsBackend for Mem {
         Ok(())
     }
     fn location_id(&self, path: &str) -> Result<String, BoxError> {
-        Ok(if self.sanitize { path.replace('.', "_") } else { path.to_string() })
+        Ok(if self.sanitize {
+            path.replace('.', "_")
+        } else {
+            path.to_string()
+        })
     }
 }
 
 fn source() -> Mem {
     Mem::with(&[
-        ("dpinto-work/gnupg/main", &[("private.asc", "-----BEGIN-----\nAAA\n-----END-----\n")]),
-        ("dpinto-work/ssh/id", &[("id_ed25519", "KEY\n"), ("id_ed25519.pub", "ssh-ed25519 AAA")]),
+        (
+            "dpinto-work/gnupg/main",
+            &[("private.asc", "-----BEGIN-----\nAAA\n-----END-----\n")],
+        ),
+        (
+            "dpinto-work/ssh/id",
+            &[
+                ("id_ed25519", "KEY\n"),
+                ("id_ed25519.pub", "ssh-ed25519 AAA"),
+            ],
+        ),
         ("dpinto-config/app/env", &[("TOKEN", "t0p")]),
     ])
 }
@@ -78,7 +93,10 @@ fn collect_paths_walks_recursively() {
 #[test]
 fn collect_paths_accepts_a_leaf() {
     let src = source();
-    assert_eq!(collect_paths(&src, "dpinto-config/app/env").unwrap(), vec!["dpinto-config/app/env"]);
+    assert_eq!(
+        collect_paths(&src, "dpinto-config/app/env").unwrap(),
+        vec!["dpinto-config/app/env"]
+    );
 }
 
 #[test]
@@ -95,13 +113,30 @@ fn dry_run_plans_but_writes_nothing() {
 fn run_copies_verifies_and_is_idempotent() {
     let src = source();
     let dst = Mem::default();
-    let r = migrate(&src, &dst, &["dpinto-work".into(), "dpinto-config".into()], false).unwrap();
+    let r = migrate(
+        &src,
+        &dst,
+        &["dpinto-work".into(), "dpinto-config".into()],
+        false,
+    )
+    .unwrap();
     assert!(r.iter().all(|p| p.verified == Some(true)));
-    assert_eq!(dst.get("dpinto-work/ssh/id").unwrap(), src.get("dpinto-work/ssh/id").unwrap());
+    assert_eq!(
+        dst.get("dpinto-work/ssh/id").unwrap(),
+        src.get("dpinto-work/ssh/id").unwrap()
+    );
     let writes = *dst.writes.borrow();
-    let again = migrate(&src, &dst, &["dpinto-work".into(), "dpinto-config".into()], false).unwrap();
+    let again = migrate(
+        &src,
+        &dst,
+        &["dpinto-work".into(), "dpinto-config".into()],
+        false,
+    )
+    .unwrap();
     assert_eq!(*dst.writes.borrow(), writes, "second run must not write");
-    assert!(again.iter().all(|p| p.unchanged > 0 && p.create == 0 && p.update == 0));
+    assert!(again
+        .iter()
+        .all(|p| p.unchanged > 0 && p.create == 0 && p.update == 0));
 }
 
 #[test]
@@ -115,7 +150,10 @@ fn changed_source_value_is_an_update() {
 #[test]
 fn colliding_targets_abort_before_writing() {
     let src = Mem::with(&[("m/a.b", &[("K", "1")]), ("m/a_b", &[("K", "2")])]);
-    let dst = Mem { sanitize: true, ..Default::default() };
+    let dst = Mem {
+        sanitize: true,
+        ..Default::default()
+    };
     assert!(migrate(&src, &dst, &["m".into()], false).is_err());
     assert_eq!(*dst.writes.borrow(), 0);
 }
@@ -124,7 +162,13 @@ fn colliding_targets_abort_before_writing() {
 fn report_never_contains_values() {
     let src = source();
     let dst = Mem::default();
-    let r = migrate(&src, &dst, &["dpinto-work".into(), "dpinto-config".into()], false).unwrap();
+    let r = migrate(
+        &src,
+        &dst,
+        &["dpinto-work".into(), "dpinto-config".into()],
+        false,
+    )
+    .unwrap();
     let text = render(&r);
     for v in ["t0p", "AAA", "KEY", "ssh-ed25519"] {
         assert!(!text.contains(v), "report leaked {v}: {text}");

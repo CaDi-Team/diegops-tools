@@ -21,7 +21,10 @@ fn get_reads_kv_v2_with_token_and_namespace_headers() {
         .match_header("x-vault-namespace", "personal")
         .with_body(r#"{"data":{"data":{"A":"1","N":5},"metadata":{}}}"#)
         .create();
-    let got = backend(&server).get("dpinto-config/app/env").unwrap().unwrap();
+    let got = backend(&server)
+        .get("dpinto-config/app/env")
+        .unwrap()
+        .unwrap();
     m.assert();
     assert_eq!(got.get("A").map(String::as_str), Some("1"));
     assert_eq!(got.get("N").map(String::as_str), Some("5"));
@@ -30,8 +33,15 @@ fn get_reads_kv_v2_with_token_and_namespace_headers() {
 #[test]
 fn get_missing_is_none() {
     let mut server = mockito::Server::new();
-    server.mock("GET", "/v1/dpinto-config/data/nope").with_status(404).with_body(r#"{"errors":[]}"#).create();
-    assert!(backend(&server).get("dpinto-config/nope").unwrap().is_none());
+    server
+        .mock("GET", "/v1/dpinto-config/data/nope")
+        .with_status(404)
+        .with_body(r#"{"errors":[]}"#)
+        .create();
+    assert!(backend(&server)
+        .get("dpinto-config/nope")
+        .unwrap()
+        .is_none());
 }
 
 #[test]
@@ -58,7 +68,10 @@ fn list_mount_root() {
         .mock("LIST", "/v1/dpinto-work/metadata/")
         .with_body(r#"{"data":{"keys":["a"]}}"#)
         .create();
-    assert_eq!(backend(&server).list("dpinto-work").unwrap(), vec!["a".to_string()]);
+    assert_eq!(
+        backend(&server).list("dpinto-work").unwrap(),
+        vec!["a".to_string()]
+    );
 }
 
 #[test]
@@ -70,7 +83,9 @@ fn put_merges_with_existing_keys() {
         .create();
     let w = server
         .mock("POST", "/v1/m/data/p")
-        .match_body(Matcher::Json(serde_json::json!({"data":{"KEEP":"k","X":"new"}})))
+        .match_body(Matcher::Json(
+            serde_json::json!({"data":{"KEEP":"k","X":"new"}}),
+        ))
         .with_body("{}")
         .expect(1)
         .create();
@@ -83,7 +98,11 @@ fn put_merges_with_existing_keys() {
 #[test]
 fn forbidden_is_reported_without_body() {
     let mut server = mockito::Server::new();
-    server.mock("GET", "/v1/m/data/p").with_status(403).with_body(r#"{"errors":["permission denied"]}"#).create();
+    server
+        .mock("GET", "/v1/m/data/p")
+        .with_status(403)
+        .with_body(r#"{"errors":["permission denied"]}"#)
+        .create();
     let err = backend(&server).get("m/p").err().unwrap().to_string();
     assert!(err.contains("403"), "{err}");
 }

@@ -1,5 +1,7 @@
 use super::*;
-use crate::secrets_backend::config::{InfisicalAuth, InfisicalConfig, InfisicalSettings, Mapping, MountMapping};
+use crate::secrets_backend::config::{
+    InfisicalAuth, InfisicalConfig, InfisicalSettings, Mapping, MountMapping,
+};
 use mockito::Matcher;
 
 fn settings(url: &str, auth: InfisicalAuth) -> InfisicalSettings {
@@ -22,8 +24,11 @@ fn settings(url: &str, auth: InfisicalAuth) -> InfisicalSettings {
 }
 
 fn backend(server: &mockito::Server) -> InfisicalBackend {
-    InfisicalBackend::new(settings(&server.url(), InfisicalAuth::AccessToken("tok".into())))
-        .with_retry_delay_ms(1)
+    InfisicalBackend::new(settings(
+        &server.url(),
+        InfisicalAuth::AccessToken("tok".into()),
+    ))
+    .with_retry_delay_ms(1)
 }
 
 fn list_query(path: &str) -> Matcher {
@@ -54,7 +59,10 @@ fn universal_auth_logs_in_once_and_caches_token() {
         .create();
     let b = InfisicalBackend::new(settings(
         &server.url(),
-        InfisicalAuth::UniversalAuth { client_id: "cid".into(), client_secret: "cs".into() },
+        InfisicalAuth::UniversalAuth {
+            client_id: "cid".into(),
+            client_secret: "cs".into(),
+        },
     ));
     b.get("dpinto-config/a").unwrap();
     b.get("dpinto-config/b").unwrap();
@@ -76,10 +84,16 @@ fn get_maps_path_to_folder_and_decodes_values() {
         .match_header("authorization", "Bearer tok")
         .with_body(body.to_string())
         .create();
-    let got = backend(&server).get("dpinto-config/app/env").unwrap().unwrap();
+    let got = backend(&server)
+        .get("dpinto-config/app/env")
+        .unwrap()
+        .unwrap();
     m.assert();
     assert_eq!(got.get("API_KEY").map(String::as_str), Some("abc"));
-    assert_eq!(got.get("id_ed25519").map(String::as_str), Some("line1\nline2\n"));
+    assert_eq!(
+        got.get("id_ed25519").map(String::as_str),
+        Some("line1\nline2\n")
+    );
 }
 
 #[test]
@@ -91,7 +105,10 @@ fn get_missing_folder_is_none() {
         .with_status(404)
         .with_body(r#"{"statusCode":404,"message":"Folder not found"}"#)
         .create();
-    assert!(backend(&server).get("dpinto-config/nope").unwrap().is_none());
+    assert!(backend(&server)
+        .get("dpinto-config/nope")
+        .unwrap()
+        .is_none());
 }
 
 #[test]
@@ -102,7 +119,10 @@ fn get_empty_folder_is_none() {
         .match_query(Matcher::Any)
         .with_body(r#"{"secrets":[],"imports":[]}"#)
         .create();
-    assert!(backend(&server).get("dpinto-config/empty").unwrap().is_none());
+    assert!(backend(&server)
+        .get("dpinto-config/empty")
+        .unwrap()
+        .is_none());
 }
 
 #[test]
@@ -160,7 +180,9 @@ fn put_creates_folder_and_upserts_only_changed_keys() {
     data.insert("SAME".into(), "1".into());
     data.insert("OLD".into(), "y".into());
     data.insert("NEW".into(), "a\nb".into());
-    backend(&server).put("dpinto-config/app/env", &data).unwrap();
+    backend(&server)
+        .put("dpinto-config/app/env", &data)
+        .unwrap();
     folder.assert();
     patch.assert();
 }
@@ -168,13 +190,19 @@ fn put_creates_folder_and_upserts_only_changed_keys() {
 #[test]
 fn put_unchanged_makes_no_write() {
     let mut server = mockito::Server::new();
-    server.mock("POST", "/api/v2/folders").with_body("{}").create();
+    server
+        .mock("POST", "/api/v2/folders")
+        .with_body("{}")
+        .create();
     server
         .mock("GET", "/api/v4/secrets")
         .match_query(Matcher::Any)
         .with_body(r#"{"secrets":[{"secretKey":"K","secretValue":"v"}]}"#)
         .create();
-    let patch = server.mock("PATCH", "/api/v4/secrets/batch").expect(0).create();
+    let patch = server
+        .mock("PATCH", "/api/v4/secrets/batch")
+        .expect(0)
+        .create();
     let mut data = SecretMap::new();
     data.insert("K".into(), "v".into());
     backend(&server).put("dpinto-config/x", &data).unwrap();
@@ -184,7 +212,10 @@ fn put_unchanged_makes_no_write() {
 #[test]
 fn put_error_never_echoes_secret_values() {
     let mut server = mockito::Server::new();
-    server.mock("POST", "/api/v2/folders").with_body("{}").create();
+    server
+        .mock("POST", "/api/v2/folders")
+        .with_body("{}")
+        .create();
     server
         .mock("GET", "/api/v4/secrets")
         .match_query(Matcher::Any)
@@ -197,7 +228,11 @@ fn put_error_never_echoes_secret_values() {
         .create();
     let mut data = SecretMap::new();
     data.insert("K".into(), "TOPSECRETVALUE".into());
-    let err = backend(&server).put("dpinto-config/x", &data).err().unwrap().to_string();
+    let err = backend(&server)
+        .put("dpinto-config/x", &data)
+        .err()
+        .unwrap()
+        .to_string();
     assert!(err.contains("400"), "{err}");
     assert!(!err.contains("TOPSECRETVALUE"), "{err}");
 }
@@ -222,5 +257,8 @@ fn list_returns_child_folders() {
 fn location_id_identifies_project_env_and_folder() {
     let server = mockito::Server::new();
     let b = backend(&server);
-    assert_eq!(b.location_id("dpinto-work/gpg").unwrap(), "proj-work/prod:/gpg");
+    assert_eq!(
+        b.location_id("dpinto-work/gpg").unwrap(),
+        "proj-work/prod:/gpg"
+    );
 }
