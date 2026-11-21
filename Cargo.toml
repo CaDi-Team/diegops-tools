@@ -13,9 +13,9 @@ path = "src/main.rs"
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 # ureq: sync HTTP client + JSON parsing (no async required).
-# default-features = false disables native-tls; the "tls" feature uses rustls
+# default-features = false disables gzip; the "rustls" feature uses rustls + ring
 # (pure Rust, no C OpenSSL dependency) — required for static musl builds.
-ureq = { version = "2", default-features = false, features = ["tls", "json"] }
+ureq = { version = "3.5", default-features = false, features = ["rustls", "json"] }
 serde_json = "1"
 serde = { version = "1", features = ["derive"] }
 # serde_yaml 0.9 is archived upstream but stable for this format.
@@ -26,7 +26,7 @@ toml = "1.2"
 sha2 = "0.11"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 rustls-pki-types = { version = "1", features = ["std"] }
-webpki-roots = "1.0"
+webpki-root-certs = "1.0"
 regex = "1"
 
 # Unix targets: extract .tar.gz release archives

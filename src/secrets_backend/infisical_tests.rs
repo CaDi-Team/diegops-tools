@@ -272,3 +272,162 @@ fn rejects_keys_infisical_cannot_store() {
         assert!(b.validate_key(bad).is_err(), "{bad:?}");
     }
 }
+
+#[test]
+fn read_error_includes_status_and_server_message() {
+    let mut server = mockito::Server::new();
+    server
+        .mock("GET", "/api/v4/secrets")
+        .match_query(Matcher::Any)
+        .with_status(403)
+        .with_body(r#"{"message":"You are not allowed"}"#)
+        .create();
+    let err = backend(&server)
+        .get("dpinto-config/x")
+        .err()
+        .unwrap()
+        .to_string();
+    assert_eq!(
+        err,
+        "Infisical read proj/prod:/dpinto-config/x failed: HTTP 403: You are not allowed"
+    );
+}
+
+#[test]
+fn read_error_without_json_body_is_bare_status() {
+    let mut server = mockito::Server::new();
+    server
+        .mock("GET", "/api/v4/secrets")
+        .match_query(Matcher::Any)
+        .with_status(401)
+        .with_body("not json")
+        .create();
+    let err = backend(&server)
+        .get("dpinto-config/x")
+        .err()
+        .unwrap()
+        .to_string();
+    assert_eq!(
+        err,
+        "Infisical read proj/prod:/dpinto-config/x failed: HTTP 401"
+    );
+}
+
+#[test]
+fn retry_after_header_is_honoured_and_requests_carry_auth_and_ua() {
+    let mut server = mockito::Server::new();
+    let ua = format!("diegops/{}", env!("CARGO_PKG_VERSION"));
+    let limited = server
+        .mock("GET", "/api/v4/secrets")
+        .match_query(Matcher::Any)
+        .match_header("authorization", "Bearer tok")
+        .match_header("user-agent", ua.as_str())
+        .with_status(429)
+        .with_header("retry-after", "0")
+        .expect(1)
+        .create();
+    let ok = server
+        .mock("GET", "/api/v4/secrets")
+        .match_query(Matcher::Any)
+        .match_header("authorization", "Bearer tok")
+        .match_header("user-agent", ua.as_str())
+        .with_body(r#"{"secrets":[]}"#)
+        .expect(1)
+        .create();
+    assert!(backend(&server).get("dpinto-config/x").unwrap().is_none());
+    limited.assert();
+    ok.assert();
+}
+
+#[test]
+fn server_errors_are_retried_up_to_max_attempts() {
+    let mut server = mockito::Server::new();
+    let failing = server
+        .mock("GET", "/api/v2/folders")
+        .match_query(Matcher::Any)
+        .with_status(503)
+        .with_body(r#"{"message":"down"}"#)
+        .expect(MAX_ATTEMPTS as usize)
+        .create();
+    let err = backend(&server)
+        .list("dpinto-config")
+        .err()
+        .unwrap()
+        .to_string();
+    failing.assert();
+    assert_eq!(
+        err,
+        "Infisical list proj/prod:/dpinto-config failed: HTTP 503: down"
+    );
+}
+
+#[test]
+fn folder_already_exists_is_success() {
+    let mut server = mockito::Server::new();
+    server
+        .mock("POST", "/api/v2/folders")
+        .with_status(400)
+        .with_body(r#"{"message":"Folder already exists"}"#)
+        .create();
+    server
+        .mock("GET", "/api/v4/secrets")
+        .match_query(Matcher::Any)
+        .with_body(r#"{"secrets":[{"secretKey":"K","secretValue":"v"}]}"#)
+        .create();
+    let mut data = SecretMap::new();
+    data.insert("K".into(), "v".into());
+    backend(&server).put("dpinto-config/x", &data).unwrap();
+}
+
+#[test]
+fn success_with_non_json_body_is_null() {
+    let mut server = mockito::Server::new();
+    server
+        .mock("GET", "/api/v2/folders")
+        .match_query(Matcher::Any)
+        .with_body("plain")
+        .create();
+    assert!(backend(&server).list("dpinto-config").unwrap().is_empty());
+}
+
+#[test]
+fn transport_error_is_reported() {
+    let b = InfisicalBackend::new(settings(
+        "http://127.0.0.1:1",
+        InfisicalAuth::AccessToken("tok".into()),
+    ));
+    let err = b.list("dpinto-config").err().unwrap().to_string();
+    assert!(
+        err.starts_with("Infisical list proj/prod:/dpinto-config failed: "),
+        "{err}"
+    );
+}
+
+#[test]
+fn writes_send_plain_json_content_type() {
+    let mut server = mockito::Server::new();
+    let f = server
+        .mock("POST", "/api/v2/folders")
+        .match_header("content-type", "application/json")
+        .match_header("authorization", "Bearer tok")
+        .with_body("{}")
+        .expect(1)
+        .create();
+    server
+        .mock("GET", "/api/v4/secrets")
+        .match_query(Matcher::Any)
+        .with_status(404)
+        .create();
+    let w = server
+        .mock("PATCH", "/api/v4/secrets/batch")
+        .match_header("content-type", "application/json")
+        .match_header("authorization", "Bearer tok")
+        .with_body("{}")
+        .expect(1)
+        .create();
+    let mut data = SecretMap::new();
+    data.insert("K".into(), "v".into());
+    backend(&server).put("dpinto-config/x", &data).unwrap();
+    f.assert();
+    w.assert();
+}

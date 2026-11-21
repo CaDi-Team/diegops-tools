@@ -451,7 +451,9 @@ fn heartbeat(kv: &str, backend: Option<&str>) -> Result<(), BoxError> {
         .and_then(|m| m.get(&key).cloned())
         .ok_or_else(|| format!("heartbeat_kv: no key '{key}' at '{path}'"))?;
     ureq::get(url.trim())
-        .timeout(std::time::Duration::from_secs(15))
+        .config()
+        .timeout_global(Some(std::time::Duration::from_secs(15)))
+        .build()
         .call()
         .map_err(|e| format!("heartbeat ping failed: {e}"))?;
     eprintln!("heartbeat sent");
