@@ -54,20 +54,20 @@ fn require_token() -> Result<String, Box<dyn std::error::Error>> {
 /// Fetches the authenticated GitHub username.
 fn get_username(token: &str) -> Result<String, Box<dyn std::error::Error>> {
     let resp = ureq::get(&format!("{GITHUB_API}/user"))
-        .set("User-Agent", &user_agent())
-        .set("Authorization", &format!("Bearer {token}"))
-        .set("Accept", "application/vnd.github.v3+json")
+        .header("User-Agent", &user_agent())
+        .header("Authorization", &format!("Bearer {token}"))
+        .header("Accept", "application/vnd.github.v3+json")
         .call();
 
     match resp {
-        Ok(r) => {
-            let json: serde_json::Value = r.into_json()?;
+        Ok(mut r) => {
+            let json: serde_json::Value = r.body_mut().read_json()?;
             json["login"]
                 .as_str()
                 .map(String::from)
                 .ok_or_else(|| "GitHub API response missing 'login'".into())
         }
-        Err(ureq::Error::Status(401 | 403, _)) => {
+        Err(ureq::Error::StatusCode(401 | 403)) => {
             Err("GitHub token is invalid or expired. Run 'diegops auth gh login <PAT>'".into())
         }
         Err(e) => Err(format!("GitHub API error: {e}").into()),
@@ -120,15 +120,15 @@ fn repo_name(username: &str, profile: Option<&str>) -> String {
 fn repo_exists(token: &str, owner: &str, repo: &str) -> Result<bool, Box<dyn std::error::Error>> {
     let url = format!("{GITHUB_API}/repos/{owner}/{repo}");
     let resp = ureq::get(&url)
-        .set("User-Agent", &user_agent())
-        .set("Authorization", &format!("Bearer {token}"))
-        .set("Accept", "application/vnd.github.v3+json")
+        .header("User-Agent", &user_agent())
+        .header("Authorization", &format!("Bearer {token}"))
+        .header("Accept", "application/vnd.github.v3+json")
         .call();
 
     match resp {
         Ok(_) => Ok(true),
-        Err(ureq::Error::Status(404, _)) => Ok(false),
-        Err(ureq::Error::Status(401 | 403, _)) => {
+        Err(ureq::Error::StatusCode(404)) => Ok(false),
+        Err(ureq::Error::StatusCode(401 | 403)) => {
             Err("GitHub token is invalid or expired. Run 'diegops auth gh login <PAT>'".into())
         }
         Err(e) => Err(format!("GitHub API error: {e}").into()),
@@ -144,18 +144,18 @@ fn create_repo(token: &str, name: &str) -> Result<(), Box<dyn std::error::Error>
     });
 
     let resp = ureq::post(&format!("{GITHUB_API}/user/repos"))
-        .set("User-Agent", &user_agent())
-        .set("Authorization", &format!("Bearer {token}"))
-        .set("Accept", "application/vnd.github.v3+json")
+        .header("User-Agent", &user_agent())
+        .header("Authorization", &format!("Bearer {token}"))
+        .header("Accept", "application/vnd.github.v3+json")
         .send_json(body);
 
     match resp {
         Ok(_) => Ok(()),
-        Err(ureq::Error::Status(422, _)) => {
+        Err(ureq::Error::StatusCode(422)) => {
             // 422 usually means the repo already exists — treat as success (idempotent)
             Ok(())
         }
-        Err(ureq::Error::Status(401 | 403, _)) => {
+        Err(ureq::Error::StatusCode(401 | 403)) => {
             Err("GitHub token is invalid or lacks repo creation scope".into())
         }
         Err(e) => Err(format!("failed to create repository: {e}").into()),
@@ -250,14 +250,14 @@ fn get_cloud_file(
 ) -> Result<Option<CloudFile>, Box<dyn std::error::Error>> {
     let url = format!("{GITHUB_API}/repos/{owner}/{repo}/contents/{path}");
     let resp = ureq::get(&url)
-        .set("User-Agent", &user_agent())
-        .set("Authorization", &format!("Bearer {token}"))
-        .set("Accept", "application/vnd.github.v3+json")
+        .header("User-Agent", &user_agent())
+        .header("Authorization", &format!("Bearer {token}"))
+        .header("Accept", "application/vnd.github.v3+json")
         .call();
 
     match resp {
-        Ok(r) => {
-            let json: serde_json::Value = r.into_json()?;
+        Ok(mut r) => {
+            let json: serde_json::Value = r.body_mut().read_json()?;
             let sha = json["sha"]
                 .as_str()
                 .ok_or("missing sha in GitHub contents response")?
@@ -265,8 +265,8 @@ fn get_cloud_file(
             let content = json["content"].as_str().map(|s| s.to_owned());
             Ok(Some(CloudFile { sha, content }))
         }
-        Err(ureq::Error::Status(404, _)) => Ok(None),
-        Err(ureq::Error::Status(401 | 403, _)) => {
+        Err(ureq::Error::StatusCode(404)) => Ok(None),
+        Err(ureq::Error::StatusCode(401 | 403)) => {
             Err("GitHub token is invalid or expired. Run 'diegops auth gh login <PAT>'".into())
         }
         Err(e) => Err(format!("GitHub API error fetching {path}: {e}").into()),
@@ -293,14 +293,14 @@ fn put_cloud_file(
 
     let url = format!("{GITHUB_API}/repos/{owner}/{repo}/contents/{path}");
     let resp = ureq::put(&url)
-        .set("User-Agent", &user_agent())
-        .set("Authorization", &format!("Bearer {token}"))
-        .set("Accept", "application/vnd.github.v3+json")
+        .header("User-Agent", &user_agent())
+        .header("Authorization", &format!("Bearer {token}"))
+        .header("Accept", "application/vnd.github.v3+json")
         .send_json(body);
 
     match resp {
         Ok(_) => Ok(()),
-        Err(ureq::Error::Status(401 | 403, _)) => {
+        Err(ureq::Error::StatusCode(401 | 403)) => {
             Err("GitHub token is invalid or lacks write access".into())
         }
         Err(e) => Err(format!("failed to upload {path}: {e}").into()),
@@ -322,14 +322,14 @@ fn list_cloud_files(
     };
 
     let resp = ureq::get(&url)
-        .set("User-Agent", &user_agent())
-        .set("Authorization", &format!("Bearer {token}"))
-        .set("Accept", "application/vnd.github.v3+json")
+        .header("User-Agent", &user_agent())
+        .header("Authorization", &format!("Bearer {token}"))
+        .header("Accept", "application/vnd.github.v3+json")
         .call();
 
     match resp {
-        Ok(r) => {
-            let json: serde_json::Value = r.into_json()?;
+        Ok(mut r) => {
+            let json: serde_json::Value = r.body_mut().read_json()?;
             let mut files = Vec::new();
 
             if let Some(arr) = json.as_array() {
@@ -351,8 +351,8 @@ fn list_cloud_files(
             Ok(files)
         }
         // Empty repo returns 404 for contents/
-        Err(ureq::Error::Status(404, _)) => Ok(Vec::new()),
-        Err(ureq::Error::Status(401 | 403, _)) => {
+        Err(ureq::Error::StatusCode(404)) => Ok(Vec::new()),
+        Err(ureq::Error::StatusCode(401 | 403)) => {
             Err("GitHub token is invalid or expired. Run 'diegops auth gh login <PAT>'".into())
         }
         Err(e) => Err(format!("GitHub API error listing {dir_path}: {e}").into()),

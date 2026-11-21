@@ -435,18 +435,18 @@ fn detect_installed_version(binary_path: &Path) -> Option<String> {
 // ---------------------------------------------------------------------------
 
 /// Creates a ureq request builder with standard headers.
-fn http_get(url: &str) -> ureq::Request {
+fn http_get(url: &str) -> ureq::RequestBuilder<ureq::typestate::WithoutBody> {
     let ua = format!("diegops/{}", env!("CARGO_PKG_VERSION"));
-    ureq::get(url).set("User-Agent", &ua)
+    ureq::get(url).header("User-Agent", &ua)
 }
 
 /// Fetches the latest release metadata from the GitHub API.
 fn fetch_github_latest(repo: &str) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
     let url = format!("https://api.github.com/repos/{repo}/releases/latest");
-    let resp = http_get(&url)
-        .set("Accept", "application/vnd.github.v3+json")
+    let mut resp = http_get(&url)
+        .header("Accept", "application/vnd.github.v3+json")
         .call()?;
-    Ok(resp.into_json()?)
+    Ok(resp.body_mut().read_json()?)
 }
 
 /// Fetches the latest version string for a tool.
@@ -463,8 +463,8 @@ fn fetch_latest_version(tool: &ToolDef) -> Result<String, Box<dyn std::error::Er
             latest_url,
             download_template: _,
         } => {
-            let resp = http_get(latest_url).call()?;
-            let body = resp.into_string()?;
+            let mut resp = http_get(latest_url).call()?;
+            let body = resp.body_mut().read_to_string()?;
             Ok(body.trim().to_string())
         }
     }
@@ -507,7 +507,11 @@ fn download_url(tool: &ToolDef, version: &str) -> String {
 /// Downloads raw bytes from a URL.
 fn download_bytes(url: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let mut buf = Vec::new();
-    http_get(url).call()?.into_reader().read_to_end(&mut buf)?;
+    http_get(url)
+        .call()?
+        .into_body()
+        .into_reader()
+        .read_to_end(&mut buf)?;
     Ok(buf)
 }
 

@@ -402,3 +402,32 @@ fn transport_error_is_reported() {
         "{err}"
     );
 }
+
+#[test]
+fn writes_send_plain_json_content_type() {
+    let mut server = mockito::Server::new();
+    let f = server
+        .mock("POST", "/api/v2/folders")
+        .match_header("content-type", "application/json")
+        .match_header("authorization", "Bearer tok")
+        .with_body("{}")
+        .expect(1)
+        .create();
+    server
+        .mock("GET", "/api/v4/secrets")
+        .match_query(Matcher::Any)
+        .with_status(404)
+        .create();
+    let w = server
+        .mock("PATCH", "/api/v4/secrets/batch")
+        .match_header("content-type", "application/json")
+        .match_header("authorization", "Bearer tok")
+        .with_body("{}")
+        .expect(1)
+        .create();
+    let mut data = SecretMap::new();
+    data.insert("K".into(), "v".into());
+    backend(&server).put("dpinto-config/x", &data).unwrap();
+    f.assert();
+    w.assert();
+}

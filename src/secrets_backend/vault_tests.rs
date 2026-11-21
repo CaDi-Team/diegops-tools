@@ -189,3 +189,37 @@ fn custom_ca_is_loaded_and_bad_ca_rejected() {
     assert_eq!(err, format!("no certificates found in {}", empty.display()));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn write_sends_plain_json_content_type() {
+    let mut server = mockito::Server::new();
+    server.mock("GET", "/v1/m/data/p").with_status(404).create();
+    let w = server
+        .mock("POST", "/v1/m/data/p")
+        .match_header("content-type", "application/json")
+        .with_body("{}")
+        .expect(1)
+        .create();
+    let mut data = SecretMap::new();
+    data.insert("X".into(), "v".into());
+    backend(&server).put("m/p", &data).unwrap();
+    w.assert();
+}
+
+#[test]
+fn valid_custom_ca_builds_client() {
+    use base64::Engine as _;
+    let der = webpki_root_certs::TLS_SERVER_ROOT_CERTS[0].as_ref();
+    let b64 = base64::engine::general_purpose::STANDARD.encode(der);
+    let pem = format!("-----BEGIN CERTIFICATE-----\n{b64}\n-----END CERTIFICATE-----\n");
+    let path = std::env::temp_dir().join(format!("diegops-ca-ok-{}.pem", std::process::id()));
+    std::fs::write(&path, pem).unwrap();
+    let res = VaultBackend::new(VaultSettings {
+        address: "https://127.0.0.1:1".into(),
+        namespace: None,
+        ca_cert: Some(path.clone()),
+        token: "vt".into(),
+    });
+    let _ = std::fs::remove_file(&path);
+    assert!(res.is_ok());
+}

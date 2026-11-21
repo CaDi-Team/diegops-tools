@@ -8,6 +8,7 @@ use std::cell::RefCell;
 use std::time::Duration;
 
 use serde_json::{json, Value};
+use ureq::http;
 
 use super::config::{InfisicalAuth, InfisicalSettings, Location};
 use super::{codec, BoxError, SecretMap, SecretsBackend};
@@ -26,10 +27,13 @@ pub struct InfisicalBackend {
 impl InfisicalBackend {
     /// Creates a client.
     pub fn new(settings: InfisicalSettings) -> Self {
-        let agent = ureq::AgentBuilder::new()
-            .timeout(Duration::from_secs(30))
-            .user_agent(&format!("diegops/{}", env!("CARGO_PKG_VERSION")))
-            .build();
+        // Status errors are handled in `send` (body message, Retry-After).
+        let agent = ureq::Agent::config_builder()
+            .timeout_global(Some(Duration::from_secs(30)))
+            .user_agent(format!("diegops/{}", env!("CARGO_PKG_VERSION")))
+            .http_status_as_error(false)
+            .build()
+            .new_agent();
         Self {
             settings,
             agent,
@@ -62,13 +66,13 @@ impl InfisicalBackend {
             } => {
                 let body = json!({ "clientId": client_id, "clientSecret": client_secret });
                 let resp = self
-                    .send(
-                        || {
+                    .send(|| {
+                        json_body(
                             self.agent
-                                .post(&self.url("/api/v1/auth/universal-auth/login"))
-                        },
-                        Some(&body),
-                    )
+                                .post(self.url("/api/v1/auth/universal-auth/login")),
+                            &body,
+                        )
+                    })
                     .map_err(|e| format!("Infisical login failed: {e}"))?;
                 resp.get("accessToken")
                     .and_then(Value::as_str)
@@ -83,27 +87,24 @@ impl InfisicalBackend {
     /// Sends a request with retries; returns parsed JSON or `HttpError`.
     fn send(
         &self,
-        build: impl Fn() -> ureq::Request,
-        body: Option<&Value>,
+        run: impl Fn() -> Result<http::Response<ureq::Body>, ureq::Error>,
     ) -> Result<Value, HttpError> {
         let mut attempt = 0;
         loop {
             attempt += 1;
-            let req = build();
-            let res = match body {
-                Some(b) => req.send_json(b.clone()),
-                None => req.call(),
-            };
-            match res {
-                Ok(r) => {
-                    let text = r.into_string().unwrap_or_default();
+            match run() {
+                Ok(mut r) if r.status().as_u16() < 400 => {
+                    let text = r.body_mut().read_to_string().unwrap_or_default();
                     return Ok(serde_json::from_str(&text).unwrap_or(Value::Null));
                 }
-                Err(ureq::Error::Status(code, r)) => {
+                Ok(mut r) => {
+                    let code = r.status().as_u16();
                     let retryable = code == 429 || code >= 500;
                     if retryable && attempt < MAX_ATTEMPTS {
                         let wait = r
-                            .header("retry-after")
+                            .headers()
+                            .get("retry-after")
+                            .and_then(|v| v.to_str().ok())
                             .and_then(|s| s.parse::<u64>().ok())
                             .map(|s| s * 1000)
                             .unwrap_or(self.retry_delay_ms << (attempt - 1))
@@ -113,7 +114,8 @@ impl InfisicalBackend {
                         continue;
                     }
                     let message = r
-                        .into_json::<Value>()
+                        .body_mut()
+                        .read_json::<Value>()
                         .ok()
                         .and_then(|v| v.get("message").and_then(Value::as_str).map(str::to_string))
                         .unwrap_or_default();
@@ -124,32 +126,40 @@ impl InfisicalBackend {
         }
     }
 
-    fn authed(&self, method: &str, path: &str) -> Result<ureq::Request, BoxError> {
+    /// POST/PATCH `path` with a bearer token and a JSON body.
+    fn send_authed(
+        &self,
+        method: &str,
+        path: &str,
+        body: &Value,
+    ) -> Result<Result<Value, HttpError>, BoxError> {
         let t = self.token()?;
-        Ok(self
-            .agent
-            .request(method, &self.url(path))
-            .set("Authorization", &format!("Bearer {t}")))
+        let url = self.url(path);
+        Ok(self.send(|| {
+            let req = match method {
+                "PATCH" => self.agent.patch(&url),
+                _ => self.agent.post(&url),
+            };
+            json_body(req.header("Authorization", format!("Bearer {t}")), body)
+        }))
     }
 
     /// Raw (still encoded) values at a location; `None` if the folder is missing.
     fn fetch_raw(&self, loc: &Location) -> Result<Option<SecretMap>, BoxError> {
         let token = self.token()?;
-        let res = self.send(
-            || {
-                self.agent
-                    .get(&self.url("/api/v4/secrets"))
-                    .set("Authorization", &format!("Bearer {token}"))
-                    .query("projectId", &loc.project_id)
-                    .query("environment", &loc.environment)
-                    .query("secretPath", &loc.folder)
-                    .query("viewSecretValue", "true")
-                    .query("expandSecretReferences", "false")
-                    .query("recursive", "false")
-                    .query("includeImports", "false")
-            },
-            None,
-        );
+        let res = self.send(|| {
+            self.agent
+                .get(self.url("/api/v4/secrets"))
+                .header("Authorization", format!("Bearer {token}"))
+                .query("projectId", &loc.project_id)
+                .query("environment", &loc.environment)
+                .query("secretPath", &loc.folder)
+                .query("viewSecretValue", "true")
+                .query("expandSecretReferences", "false")
+                .query("recursive", "false")
+                .query("includeImports", "false")
+                .call()
+        });
         let v = match res {
             Ok(v) => v,
             Err(HttpError::Status(404, _)) => return Ok(None),
@@ -187,8 +197,7 @@ impl InfisicalBackend {
             "name": name,
             "path": parent,
         });
-        let req = self.authed("POST", "/api/v2/folders")?;
-        match self.send(|| req.clone(), Some(&body)) {
+        match self.send_authed("POST", "/api/v2/folders", &body)? {
             Ok(_) => Ok(()),
             Err(HttpError::Status(400, m)) if m.contains("already exists") => Ok(()),
             Err(e) => Err(format!("Infisical create folder {} failed: {e}", describe(loc)).into()),
@@ -217,17 +226,15 @@ impl SecretsBackend for InfisicalBackend {
     fn list(&self, path: &str) -> Result<Vec<String>, BoxError> {
         let loc = self.settings.mapping.locate(path)?;
         let token = self.token()?;
-        let res = self.send(
-            || {
-                self.agent
-                    .get(&self.url("/api/v2/folders"))
-                    .set("Authorization", &format!("Bearer {token}"))
-                    .query("projectId", &loc.project_id)
-                    .query("environment", &loc.environment)
-                    .query("path", &loc.folder)
-            },
-            None,
-        );
+        let res = self.send(|| {
+            self.agent
+                .get(self.url("/api/v2/folders"))
+                .header("Authorization", format!("Bearer {token}"))
+                .query("projectId", &loc.project_id)
+                .query("environment", &loc.environment)
+                .query("path", &loc.folder)
+                .call()
+        });
         let v = match res {
             Ok(v) => v,
             Err(HttpError::Status(404, _)) => return Ok(Vec::new()),
@@ -267,8 +274,7 @@ impl SecretsBackend for InfisicalBackend {
             "mode": "upsert",
             "secrets": changed,
         });
-        let req = self.authed("PATCH", "/api/v4/secrets/batch")?;
-        match self.send(|| req.clone(), Some(&body)) {
+        match self.send_authed("PATCH", "/api/v4/secrets/batch", &body)? {
             Ok(_) => Ok(()),
             // Never echo the server message on writes: it may quote values.
             Err(HttpError::Status(code, _)) => {
@@ -291,6 +297,15 @@ impl SecretsBackend for InfisicalBackend {
     fn location_id(&self, path: &str) -> Result<String, BoxError> {
         Ok(describe(&self.settings.mapping.locate(path)?))
     }
+}
+
+/// Sends `body` as JSON with the same `Content-Type` ureq 2 used.
+fn json_body(
+    req: ureq::RequestBuilder<ureq::typestate::WithBody>,
+    body: &Value,
+) -> Result<http::Response<ureq::Body>, ureq::Error> {
+    req.header("Content-Type", "application/json")
+        .send_json(body)
 }
 
 /// `project/env:/folder`.

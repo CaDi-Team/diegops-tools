@@ -189,28 +189,26 @@ fn check_github() -> Result<String, Box<dyn std::error::Error>> {
 
     let ua = format!("diegops/{}", env!("CARGO_PKG_VERSION"));
     let response = ureq::get("https://api.github.com/user")
-        .set("User-Agent", &ua)
-        .set("Authorization", &format!("Bearer {token}"))
-        .set("Accept", "application/vnd.github.v3+json")
+        .header("User-Agent", &ua)
+        .header("Authorization", &format!("Bearer {token}"))
+        .header("Accept", "application/vnd.github.v3+json")
         .call();
 
     match response {
-        Ok(resp) => {
-            let json: serde_json::Value = resp.into_json()?;
+        Ok(mut resp) => {
+            let json: serde_json::Value = resp.body_mut().read_json()?;
             let login = json["login"]
                 .as_str()
                 .ok_or("GitHub API response missing 'login'")?;
             Ok(login.to_string())
         }
-        Err(ureq::Error::Status(401 | 403, _)) => {
+        Err(ureq::Error::StatusCode(401 | 403)) => {
             Err("stored GitHub token is no longer valid. Run 'diegops auth gh login <PAT>'".into())
         }
-        Err(ureq::Error::Status(code, _)) => {
+        Err(ureq::Error::StatusCode(code)) => {
             Err(format!("GitHub API returned unexpected status {code}").into())
         }
-        Err(ureq::Error::Transport(_)) => {
-            Err("could not reach GitHub API. Check your connection".into())
-        }
+        Err(_) => Err("could not reach GitHub API. Check your connection".into()),
     }
 }
 

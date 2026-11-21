@@ -63,11 +63,11 @@ fn ktool_bin_path() -> Result<PathBuf, Box<dyn std::error::Error>> {
 /// Fetches the latest release metadata from the GitHub API.
 fn fetch_latest() -> Result<serde_json::Value, Box<dyn std::error::Error>> {
     let ua = format!("diegops/{}", env!("CARGO_PKG_VERSION"));
-    let resp = ureq::get(RELEASES_API)
-        .set("User-Agent", &ua)
-        .set("Accept", "application/vnd.github.v3+json")
+    let mut resp = ureq::get(RELEASES_API)
+        .header("User-Agent", &ua)
+        .header("Accept", "application/vnd.github.v3+json")
         .call()?;
-    Ok(resp.into_json()?)
+    Ok(resp.body_mut().read_json()?)
 }
 
 /// Finds the download URL for the ktool asset matching the current target.
@@ -101,8 +101,9 @@ fn download(url: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let ua = format!("diegops/{}", env!("CARGO_PKG_VERSION"));
     let mut buf = Vec::new();
     ureq::get(url)
-        .set("User-Agent", &ua)
+        .header("User-Agent", &ua)
         .call()?
+        .into_body()
         .into_reader()
         .read_to_end(&mut buf)?;
     Ok(buf)
