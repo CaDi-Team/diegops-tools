@@ -31,6 +31,7 @@ regex = "1"
 
 # Unix targets: extract .tar.gz release archives
 [target.'cfg(unix)'.dependencies]
+libc = "0.2"
 flate2 = "1"
 tar = "0.4"
 
