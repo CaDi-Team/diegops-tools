@@ -306,6 +306,8 @@ pub struct Ctx {
     pub url: Option<String>,
     /// Secrets base path for `.env` (`<base>/<profile>`).
     pub secrets_path: Option<String>,
+    /// Secrets backend override.
+    pub secrets_backend: Option<String>,
     /// Heartbeat `<path>#<key>`.
     pub heartbeat_kv: Option<String>,
 }
@@ -322,6 +324,7 @@ impl Ctx {
             branch: reg.repo.branch.clone(),
             url: reg.repo.url.clone(),
             secrets_path: e.secrets_path.clone(),
+            secrets_backend: e.secrets_backend.clone(),
             heartbeat_kv: reg.heartbeat_kv.clone(),
         })
     }
@@ -435,14 +438,14 @@ pub fn backup(reg: &Registry, only: Option<&str>) -> Result<(), BoxError> {
     let (files, bytes, commit) = outcome.map_err(BoxError::from)?;
     println!("hermes: backed up {files} files ({bytes} bytes) at {commit}");
     if let Some(kv) = &ctx.heartbeat_kv {
-        heartbeat(kv)?;
+        heartbeat(kv, ctx.secrets_backend.as_deref())?;
     }
     Ok(())
 }
 
-fn heartbeat(kv: &str) -> Result<(), BoxError> {
+fn heartbeat(kv: &str, backend: Option<&str>) -> Result<(), BoxError> {
     let (path, key) = support::split_kv_ref(kv)?;
-    let b = crate::secrets_backend::open(None)?;
+    let b = crate::secrets_backend::open(backend)?;
     let url = b
         .get(&path)?
         .and_then(|m| m.get(&key).cloned())
@@ -530,7 +533,7 @@ fn inject_env(ctx: &Ctx, profile: &str, target: &Path) -> Result<(), BoxError> {
         return Ok(());
     };
     let path = format!("{}/{profile}", base.trim_end_matches('/'));
-    let b = crate::secrets_backend::open(None)?;
+    let b = crate::secrets_backend::open(ctx.secrets_backend.as_deref())?;
     let Some(map) = b.get(&path)? else {
         eprintln!(
             "  {profile}: nothing at '{path}' ({}); .env not injected",
@@ -616,7 +619,7 @@ pub fn secrets_push(reg: &Registry, only: Option<&str>) -> Result<(), BoxError> 
         .secrets_path
         .as_deref()
         .ok_or("set secrets_path for hermes in agents.yaml first")?;
-    let b = crate::secrets_backend::open(None)?;
+    let b = crate::secrets_backend::open(ctx.secrets_backend.as_deref())?;
     for p in ctx.select(only)? {
         let env = p.dir.join(".env");
         let Ok(text) = fs::read_to_string(&env) else {

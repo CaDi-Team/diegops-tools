@@ -57,6 +57,9 @@ pub struct AgentEntry {
     pub root: Option<String>,
     /// Secrets-backend base path for per-profile `.env` (`<base>/<profile>`).
     pub secrets_path: Option<String>,
+    /// Secrets backend for this agent (`infisical` | `openbao` | `vault`);
+    /// default: the one in `~/.config/diegops/config.toml` (Infisical).
+    pub secrets_backend: Option<String>,
 }
 
 /// `~/.diegops/agents.yaml`.

@@ -11,6 +11,7 @@ agents:
   - kind: hermes
     root: $HOME/.hermes
     secrets_path: me/agents/hermes
+    secrets_backend: openbao
   - kind: pi
 "#;
     let r = Registry::parse(y).expect("parse");
@@ -22,6 +23,8 @@ agents:
         r.agents[0].secrets_path.as_deref(),
         Some("me/agents/hermes")
     );
+    assert_eq!(r.agents[0].secrets_backend.as_deref(), Some("openbao"));
+    assert_eq!(r.agents[1].secrets_backend, None);
     assert_eq!(r.heartbeat_kv.as_deref(), Some("me/agents/heartbeat#url"));
     assert!(r.find(Kind::Hermes).is_some());
 }

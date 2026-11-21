@@ -108,6 +108,7 @@ agents:
   - kind: hermes
     root: ~/.hermes
     secrets_path: me/agents/hermes      # .env per profile at <secrets_path>/<profile>
+    # secrets_backend: infisical        # infisical (default, free) | openbao | vault
 ";
 
 /// Entry point.

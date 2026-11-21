@@ -62,17 +62,17 @@ enum Commands {
     Cadi,
     /// Bootstrap a fresh workstation in one shot
     #[command(long_about = "Bootstrap a fresh workstation in one shot.\n\n\
-            Runs 'diegops all pull' (sync pull → SSH keys → repo apply →\n\\
-            .env injection → secrets pull → agents restore → shell init),\n\\
-            verifying GitHub and the secrets backend first.\n\n\\
+            Runs 'diegops all pull' (sync pull → SSH keys → repo apply →\n\
+            .env injection → secrets pull → agents restore → shell init),\n\
+            verifying GitHub and the secrets backend first.\n\n\
             Finishes with a summary report and the hero banner.\n\
             Requires: GitHub token and secrets-backend credentials.")]
     Bootstrap,
     /// Push or pull everything: repos, secrets, agent context, and cloud config
     #[command(long_about = "Push or pull everything in one command.\n\n\
-            all pull: sync pull → SSH keys → repo apply → .env injection → secrets pull →\n\\
-                      agents restore (missing profiles only) → shell init\n\\
-            all push: secrets push → agents backup → sync push\n\n\\
+            all pull: sync pull → SSH keys → repo apply → .env injection → secrets pull →\n\
+                      agents restore (missing profiles only) → shell init\n\
+            all push: secrets push → agents backup → sync push\n\n\
             Continues past a failed step and prints a summary at the end.\n\
             Requires: GitHub token and secrets-backend credentials (for pull).")]
     All {
@@ -117,10 +117,10 @@ enum Commands {
         cmd: commands::kv::KvCommand,
     },
     /// Back up and restore local AI agent context (diegops agents hermes …)
-    #[command(long_about = "Back up and restore local AI agent context.\n\n\\
-        Name the agent explicitly: diegops agents hermes backup|restore|status|memory|secrets.\n\\
-        Group views: diegops agents status | install-timer | init.\n\\
-        Registry: ~/.diegops/agents.yaml ($DIEGOPS_AGENTS_CONFIG). Conversations,\n\\
+    #[command(long_about = "Back up and restore local AI agent context.\n\n\
+        Name the agent explicitly: diegops agents hermes backup|restore|status|memory|secrets.\n\
+        Group views: diegops agents status | install-timer | init.\n\
+        Registry: ~/.diegops/agents.yaml ($DIEGOPS_AGENTS_CONFIG). Conversations,\n\
         state.db, .env and tokens are never written to git.")]
     Agents {
         #[command(subcommand)]
