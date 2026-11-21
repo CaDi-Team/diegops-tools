@@ -160,7 +160,7 @@ Expand-Archive diegops.zip -DestinationPath "$env:USERPROFILE\bin" -Force   # ad
 
 ```console
 $ diegops version
-diegops v1.6.0
+diegops v1.6.3
 ```
 
 To update later, run `diegops update`. It prints "Already up to date" when there is nothing new.
@@ -576,6 +576,7 @@ Errors go to stderr as `error: <what failed>`, with optional `  hint: <what to d
 
 | Command | What it does |
 |---|---|
+| `diegops help [command…]` | Grouped command list, or help for one command (`diegops help repo apply`). Typos get a "did you mean" hint. |
 | `diegops version` / `diegops update` | Show the version / self-update |
 | `diegops bootstrap` | Full new-machine setup (same as `all pull`) |
 | `diegops all pull` | sync pull → SSH keys → repo apply → vault apply → secrets pull → agent restore (missing profiles) → shell init |
