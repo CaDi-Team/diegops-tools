@@ -28,6 +28,7 @@ sha2 = "0.10"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 rustls-pki-types = { version = "1", features = ["std"] }
 webpki-roots = "0.26"
+regex = "1"
 
 # Unix targets: extract .tar.gz release archives
 [target.'cfg(unix)'.dependencies]
