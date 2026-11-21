@@ -653,3 +653,23 @@ fn kv_backend_reports_infisical_by_default() {
     assert!(String::from_utf8_lossy(&out.stdout).contains("infisical"));
     std::fs::remove_dir_all(&home).unwrap();
 }
+
+/// Piping into a reader that closes early (`diegops ... | head -1`) must end
+/// quietly like other Unix tools, not panic with "failed printing to stdout".
+#[cfg(unix)]
+#[test]
+fn closed_stdout_pipe_does_not_panic() {
+    use std::process::Stdio;
+    let mut child = diegops()
+        .arg("version")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("failed to run diegops");
+    // Close the read end before the child prints (println! panics on EPIPE).
+    drop(child.stdout.take());
+    let output = child.wait_with_output().expect("wait failed");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!stderr.contains("panicked"), "stderr: {stderr}");
+    assert!(!stderr.contains("Broken pipe"), "stderr: {stderr}");
+}

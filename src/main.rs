@@ -217,7 +217,22 @@ enum Commands {
     External(Vec<String>),
 }
 
+/// Rust ignores SIGPIPE, so `println!` panics when stdout is a closed pipe
+/// (`diegops ... | head`). Restore the default so we exit quietly like other
+/// Unix tools.
+#[cfg(unix)]
+fn reset_sigpipe() {
+    // SAFETY: called once at startup, before any threads are spawned.
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
+}
+
+#[cfg(not(unix))]
+fn reset_sigpipe() {}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    reset_sigpipe();
     let cli = Cli::parse();
     match cli.command {
         Some(Commands::Version) => {
