@@ -20,13 +20,13 @@ serde_json = "1"
 serde = { version = "1", features = ["derive"] }
 # serde_yaml 0.9 is archived upstream but stable for this format.
 serde_norway = "0.9"
-base64 = "0.22"
+base64 = "0.23"
 sha1 = "0.11"
-toml = "0.8"
-sha2 = "0.10"
+toml = "1.2"
+sha2 = "0.11"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 rustls-pki-types = { version = "1", features = ["std"] }
-webpki-roots = "0.26"
+webpki-roots = "1.0"
 regex = "1"
 
 # Unix targets: extract .tar.gz release archives
