@@ -106,3 +106,86 @@ fn forbidden_is_reported_without_body() {
     let err = backend(&server).get("m/p").err().unwrap().to_string();
     assert!(err.contains("403"), "{err}");
 }
+
+#[test]
+fn forbidden_message_is_exact() {
+    let mut server = mockito::Server::new();
+    server
+        .mock("LIST", "/v1/m/metadata/p")
+        .with_status(403)
+        .with_body(r#"{"errors":["permission denied SECRETISH"]}"#)
+        .create();
+    let err = backend(&server).list("m/p").err().unwrap().to_string();
+    assert_eq!(err, "Vault list 'm/p' failed: HTTP 403");
+}
+
+#[test]
+fn list_missing_is_empty() {
+    let mut server = mockito::Server::new();
+    server
+        .mock("LIST", "/v1/m/metadata/none")
+        .with_status(404)
+        .create();
+    assert!(backend(&server).list("m/none").unwrap().is_empty());
+}
+
+#[test]
+fn write_error_never_echoes_body() {
+    let mut server = mockito::Server::new();
+    server.mock("GET", "/v1/m/data/p").with_status(404).create();
+    server
+        .mock("POST", "/v1/m/data/p")
+        .with_status(500)
+        .with_body(r#"{"errors":["TOPSECRETVALUE"]}"#)
+        .create();
+    let mut data = SecretMap::new();
+    data.insert("X".into(), "TOPSECRETVALUE".into());
+    let err = backend(&server)
+        .put("m/p", &data)
+        .err()
+        .unwrap()
+        .to_string();
+    assert_eq!(err, "Vault write 'm/p' failed: HTTP 500");
+}
+
+#[test]
+fn no_namespace_header_when_unset() {
+    let mut server = mockito::Server::new();
+    let m = server
+        .mock("GET", "/v1/m/data/p")
+        .match_header("x-vault-namespace", Matcher::Missing)
+        .match_header(
+            "user-agent",
+            format!("diegops/{}", env!("CARGO_PKG_VERSION")).as_str(),
+        )
+        .with_body(r#"{"data":{"data":{"A":"1"}}}"#)
+        .create();
+    let b = VaultBackend::new(VaultSettings {
+        address: server.url(),
+        namespace: None,
+        ca_cert: None,
+        token: "vt".into(),
+    })
+    .unwrap();
+    assert!(b.get("m/p").unwrap().is_some());
+    m.assert();
+}
+
+#[test]
+fn custom_ca_is_loaded_and_bad_ca_rejected() {
+    let dir = std::env::temp_dir().join(format!("diegops-ca-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let empty = dir.join("empty.pem");
+    std::fs::write(&empty, "").unwrap();
+    let err = VaultBackend::new(VaultSettings {
+        address: "https://127.0.0.1:1".into(),
+        namespace: None,
+        ca_cert: Some(empty.clone()),
+        token: "vt".into(),
+    })
+    .err()
+    .unwrap()
+    .to_string();
+    assert_eq!(err, format!("no certificates found in {}", empty.display()));
+    let _ = std::fs::remove_dir_all(&dir);
+}
