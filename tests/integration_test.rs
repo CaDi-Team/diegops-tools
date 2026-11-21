@@ -673,3 +673,55 @@ fn closed_stdout_pipe_does_not_panic() {
     assert!(!stderr.contains("panicked"), "stderr: {stderr}");
     assert!(!stderr.contains("Broken pipe"), "stderr: {stderr}");
 }
+
+// --- #37: readable errors -------------------------------------------------
+
+#[test]
+fn runtime_error_is_printed_readably() {
+    let output = diegops()
+        .args([
+            "repo",
+            "list",
+            "--config",
+            "/nonexistent/diegops/repos.yaml",
+        ])
+        .output()
+        .expect("failed to run diegops");
+
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.starts_with("error: config not found: "),
+        "got: {stderr}"
+    );
+    assert!(!stderr.contains("\\n"), "literal \\n in: {stderr}");
+    assert!(!stderr.contains('"'), "debug quotes in: {stderr}");
+    assert!(
+        stderr.contains("\n  hint: "),
+        "hint not on its own line: {stderr}"
+    );
+}
+
+#[test]
+fn unknown_command_is_a_usage_error() {
+    let output = diegops()
+        .arg("nonexistent-tool-xyz")
+        .output()
+        .expect("failed to run diegops");
+
+    assert_eq!(output.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.starts_with("error: unknown command 'nonexistent-tool-xyz'"),
+        "got: {stderr}"
+    );
+    assert!(stderr.contains("diegops --help"), "got: {stderr}");
+}
+
+#[test]
+fn long_help_documents_exit_codes() {
+    let output = diegops().arg("--help").output().expect("run");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("EXIT CODES:"), "got: {stdout}");
+    assert!(stdout.contains("2  usage error"), "got: {stdout}");
+}

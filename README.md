@@ -547,6 +547,8 @@ profiles automatically, after the `.env` files are available.
 
 ## Troubleshooting
 
+Errors go to stderr as `error: <what failed>`, with optional `  hint: <what to do>` lines below. Exit codes: `0` success, `1` the command failed, `2` usage error (unknown command, bad flag or argument).
+
 | Symptom | Cause and fix |
 |---|---|
 | `kv migrate` shows the wrong source, or prints `warning: VAULT_ADDR env overrides the [vault] config value` | `VAULT_ADDR` or `VAULT_NAMESPACE` set in your shell (for example old `.zshrc` lines) wins over `config.toml`. Run `unset VAULT_ADDR VAULT_NAMESPACE` and remove the exports. |

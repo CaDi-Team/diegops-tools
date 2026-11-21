@@ -82,7 +82,7 @@ pub fn read_config_file(path: &Path) -> Result<String, Box<dyn std::error::Error
     fs::read_to_string(path).map_err(|e| {
         if e.kind() == io::ErrorKind::NotFound {
             format!(
-                "config not found: {}\n  Hint: create it or pass --config <path>",
+                "config not found: {}\n  hint: create it or pass --config <path>",
                 path.display()
             )
             .into()
