@@ -253,7 +253,12 @@ pub fn apply(
         for f in &failures {
             eprintln!("  {f}");
         }
-        return Err(format!("{} target(s) failed", failures.len()).into());
+        return Err(super::common::failed_items_error(
+            "target",
+            n_written + n_skipped + failures.len(),
+            &failures,
+            "fix the errors above, then rerun 'diegops vault apply'",
+        ));
     }
 
     Ok(())

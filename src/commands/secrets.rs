@@ -538,7 +538,12 @@ pub fn push(
         for f in &failures {
             eprintln!("  {f}");
         }
-        return Err(format!("{} folder(s) failed", failures.len()).into());
+        return Err(super::common::failed_items_error(
+            "folder",
+            n_pushed + n_unchanged + failures.len(),
+            &failures,
+            "fix the errors above, then rerun 'diegops secrets push'",
+        ));
     }
 
     Ok(())
@@ -710,7 +715,12 @@ pub fn pull(
         for f in &failures {
             eprintln!("  {f}");
         }
-        return Err(format!("{} folder(s) failed", failures.len()).into());
+        return Err(super::common::failed_items_error(
+            "folder",
+            n_written + n_unchanged + failures.len(),
+            &failures,
+            "fix the errors above, then rerun 'diegops secrets pull'",
+        ));
     }
 
     Ok(())

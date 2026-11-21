@@ -20,6 +20,10 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         Ok(())
     } else {
         eprintln!("Workstation ready with {failures} error(s).");
-        Err(format!("{failures} bootstrap step(s) failed").into())
+        Err(super::all::steps_failed_error(
+            &results,
+            "bootstrap",
+            "diegops bootstrap",
+        ))
     }
 }

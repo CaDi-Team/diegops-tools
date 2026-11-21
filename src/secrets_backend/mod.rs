@@ -78,7 +78,45 @@ pub fn open_kind(
 
 /// Opens the selected backend (flag > env > config > Infisical).
 pub fn open(flag: Option<&str>) -> Result<Box<dyn SecretsBackend>, BoxError> {
-    let (_, cfg) = load_config()?;
+    let (path, cfg) = load_config()?;
     let kind = config::select_kind(&cfg, flag, &real_env)?;
-    open_kind(&cfg, kind)
+    open_kind(&cfg, kind).map_err(|e| with_config_hint(e, &path, path.exists()))
+}
+
+/// Adds where the config lives (and whether it exists) to a backend
+/// credential/connection error, so the user knows which file to edit.
+pub fn with_config_hint(err: BoxError, path: &std::path::Path, exists: bool) -> BoxError {
+    let where_ = if exists {
+        format!("edit {}", path.display())
+    } else {
+        format!("config file {} does not exist yet", path.display())
+    };
+    format!("{err}\n  hint: {where_}\n  hint: see 'diegops kv --help' for how to set up a backend")
+        .into()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    #[test]
+    fn credential_error_gets_config_path_hint_when_missing() {
+        let out = super::with_config_hint(
+            "no Infisical credentials: x".into(),
+            Path::new("/h/.config/diegops/config.toml"),
+            false,
+        )
+        .to_string();
+        assert_eq!(
+            out,
+            "no Infisical credentials: x\n  hint: config file /h/.config/diegops/config.toml does not exist yet\n  hint: see 'diegops kv --help' for how to set up a backend"
+        );
+    }
+
+    #[test]
+    fn credential_error_names_existing_config() {
+        let out = super::with_config_hint("no Vault token: y".into(), Path::new("/c.toml"), true)
+            .to_string();
+        assert!(out.contains("\n  hint: edit /c.toml"), "{out}");
+    }
 }

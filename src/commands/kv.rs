@@ -64,7 +64,11 @@ pub fn run(cmd: KvCommand, backend: Option<&str>) -> Result<(), BoxError> {
                 config::BackendKind::Vault => "vault",
             };
             println!("backend: {name}");
-            println!("config:  {}", path.display());
+            if path.exists() {
+                println!("config:  {}", path.display());
+            } else {
+                println!("config:  {} (not found, using defaults)", path.display());
+            }
         }
         KvCommand::Get { path, key } => {
             let b = secrets_backend::open(backend)?;
@@ -113,7 +117,7 @@ pub fn run(cmd: KvCommand, backend: Option<&str>) -> Result<(), BoxError> {
             to,
             dry_run,
         } => {
-            let (_, cfg) = secrets_backend::load_config()?;
+            let (cfg_path, cfg) = secrets_backend::load_config()?;
             let src_kind = config::select_kind(&cfg, Some(&from), &secrets_backend::real_env)?;
             let dst_kind = config::select_kind(&cfg, Some(&to), &secrets_backend::real_env)?;
             if src_kind == dst_kind {
@@ -123,8 +127,9 @@ pub fn run(cmd: KvCommand, backend: Option<&str>) -> Result<(), BoxError> {
                 "{}",
                 migrate_header(&cfg, src_kind, dst_kind, &secrets_backend::real_env)
             );
-            let src = secrets_backend::open_kind(&cfg, src_kind)?;
-            let dst = secrets_backend::open_kind(&cfg, dst_kind)?;
+            let hint = |e| secrets_backend::with_config_hint(e, &cfg_path, cfg_path.exists());
+            let src = secrets_backend::open_kind(&cfg, src_kind).map_err(hint)?;
+            let dst = secrets_backend::open_kind(&cfg, dst_kind).map_err(hint)?;
             let reports = migrate::migrate(src.as_ref(), dst.as_ref(), &prefixes, dry_run)?;
             print!("{}", migrate::render(&reports));
             if dry_run {

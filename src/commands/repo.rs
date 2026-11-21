@@ -36,7 +36,7 @@ pub enum RepoCommand {
 
         /// Path to the repos.yaml config file.
         ///
-        /// Defaults to ~/.config/diegops/repos.yaml or $DIEGOPS_REPOS_CONFIG.
+        /// Defaults to ~/.diegops/repos.yaml or $DIEGOPS_REPOS_CONFIG.
         #[arg(long)]
         config: Option<String>,
     },
@@ -156,7 +156,12 @@ pub fn apply(
         for f in &failures {
             eprintln!("  {f}");
         }
-        return Err(format!("{} clone(s) failed", failures.len()).into());
+        return Err(super::common::failed_items_error(
+            "clone",
+            n_cloned + n_skipped + failures.len(),
+            &failures,
+            "check repo access with 'diegops auth status', then rerun 'diegops repo apply'",
+        ));
     }
 
     Ok(())

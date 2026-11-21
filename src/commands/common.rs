@@ -75,17 +75,44 @@ pub fn resolve_config_path(
     }
 }
 
+/// The `init` command that writes a sample of the given config file.
+fn init_command_for(path: &Path) -> Option<&'static str> {
+    match path.file_name()?.to_str()? {
+        "repos.yaml" => Some("diegops repo init"),
+        "secrets.yaml" => Some("diegops secrets init"),
+        "repo-vault.yaml" => Some("diegops vault init"),
+        "agents.yaml" => Some("diegops agents init"),
+        "gpg-config.yaml" => Some("diegops devtools gpg init"),
+        _ => None,
+    }
+}
+
+/// Error for a batch where some items failed: names them and says what to do.
+pub fn failed_items_error(
+    what: &str,
+    total: usize,
+    failed: &[String],
+    hint: &str,
+) -> Box<dyn std::error::Error> {
+    format!(
+        "{} of {total} {what}(s) failed: {}\n  hint: {hint}",
+        failed.len(),
+        failed.join(", ")
+    )
+    .into()
+}
+
 /// Reads a config file and returns its content as a string.
 ///
 /// Provides user-friendly errors for missing files.
 pub fn read_config_file(path: &Path) -> Result<String, Box<dyn std::error::Error>> {
     fs::read_to_string(path).map_err(|e| {
         if e.kind() == io::ErrorKind::NotFound {
-            format!(
-                "config not found: {}\n  hint: create it or pass --config <path>",
-                path.display()
-            )
-            .into()
+            let hint = match init_command_for(path) {
+                Some(cmd) => format!("run '{cmd}' to create a sample, or pass --config <path>"),
+                None => "pass --config <path> or create the file".to_string(),
+            };
+            format!("config not found: {}\n  hint: {hint}", path.display()).into()
         } else {
             format!("could not read {}: {e}", path.display()).into()
         }
@@ -146,6 +173,53 @@ pub fn write_file_with_backup(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn missing_config_hint_names_the_init_command() {
+        let cases = [
+            ("repos.yaml", "diegops repo init"),
+            ("secrets.yaml", "diegops secrets init"),
+            ("repo-vault.yaml", "diegops vault init"),
+            ("agents.yaml", "diegops agents init"),
+            ("gpg-config.yaml", "diegops devtools gpg init"),
+        ];
+        for (file, cmd) in cases {
+            let err = super::read_config_file(&std::path::Path::new("/nonexistent/x").join(file))
+                .unwrap_err()
+                .to_string();
+            assert!(
+                err.starts_with("config not found: /nonexistent/x/"),
+                "{err}"
+            );
+            assert!(
+                err.contains(&format!("hint: run '{cmd}' to create a sample")),
+                "{err}"
+            );
+        }
+    }
+
+    #[test]
+    fn missing_unknown_config_keeps_generic_hint() {
+        let err = super::read_config_file(std::path::Path::new("/nonexistent/other.yaml"))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("hint: pass --config <path>"), "{err}");
+    }
+
+    #[test]
+    fn failed_items_error_names_items_and_hint() {
+        let err = super::failed_items_error(
+            "clone",
+            3,
+            &["a".to_string(), "b".to_string()],
+            "check access with 'diegops auth status'",
+        )
+        .to_string();
+        assert_eq!(
+            err,
+            "2 of 3 clone(s) failed: a, b\n  hint: check access with 'diegops auth status'"
+        );
+    }
+
     use super::*;
 
     #[test]

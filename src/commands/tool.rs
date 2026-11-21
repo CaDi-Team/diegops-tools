@@ -750,7 +750,7 @@ pub fn update(name: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
             // Update all installed tools
             let bin = bin_dir()?;
             let mut updated = 0u32;
-            let mut errors = 0u32;
+            let mut failed: Vec<String> = Vec::new();
 
             for tool in REGISTRY {
                 let path = bin.join(if cfg!(windows) {
@@ -765,20 +765,25 @@ pub fn update(name: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
                         Ok(()) => updated += 1,
                         Err(e) => {
                             eprintln!("FAIL {}: {e}", tool.name);
-                            errors += 1;
+                            failed.push(tool.name.to_string());
                         }
                     }
                 }
             }
 
-            if updated == 0 && errors == 0 {
+            if updated == 0 && failed.is_empty() {
                 println!("No tools installed. Run 'diegops tool install <name>' first.");
             } else {
-                println!("{updated} tool(s) updated, {errors} error(s).");
+                println!("{updated} tool(s) updated, {} error(s).", failed.len());
             }
 
-            if errors > 0 {
-                return Err(format!("{errors} tool(s) failed to update").into());
+            if !failed.is_empty() {
+                return Err(super::common::failed_items_error(
+                    "tool update",
+                    updated as usize + failed.len(),
+                    &failed,
+                    "check your network/GitHub rate limit, then rerun 'diegops tool update <name>'",
+                ));
             }
 
             Ok(())
