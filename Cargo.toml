@@ -28,6 +28,8 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 rustls-pki-types = { version = "1", features = ["std"] }
 webpki-root-certs = "1.0"
 regex = "1"
+clap_complete = "4"
+clap_mangen = "0.3"
 
 # Unix targets: extract .tar.gz release archives
 [target.'cfg(unix)'.dependencies]
