@@ -8,6 +8,8 @@ on:
       - "docs/**"
       - "LICENSE"
       - ".gitignore"
+  schedule:
+    - cron: "17 9 * * 1"   # weekly: new advisories surface even without commits
   push:
     branches: ["develop", "main"]
     paths-ignore:
@@ -15,6 +17,9 @@ on:
       - "docs/**"
       - "LICENSE"
       - ".gitignore"
+
+permissions:
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -46,14 +51,21 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
-      - name: Refresh lock file (downgrade yanked crates)
-        run: cargo update
-
       - name: Check formatting
         run: cargo fmt --check
 
       - name: Clippy
-        run: cargo clippy -- -D warnings
+        run: cargo clippy --locked --all-targets -- -D warnings
 
       - name: Run tests
-        run: cargo test
+        run: cargo test --locked
+
+  audit:
+    name: Security audit (RustSec)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+      - name: cargo audit
+        run: cargo audit --deny warnings

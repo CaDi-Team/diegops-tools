@@ -87,18 +87,16 @@ jobs:
           zig version
           cargo install cargo-zigbuild --locked
 
-      - name: Refresh lock file (downgrade yanked crates)
-        run: cargo update
 
       # ── Build ────────────────────────────────────────────────────────────────
 
       - name: Build (native)
         if: matrix.tool == 'native'
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo build --locked --release --target ${{ matrix.target }}
 
       - name: Build (zigbuild)
         if: matrix.tool == 'zigbuild'
-        run: cargo zigbuild --release --target ${{ matrix.target }}
+        run: cargo zigbuild --locked --release --target ${{ matrix.target }}
 
       # ── Archive ──────────────────────────────────────────────────────────────
 
