@@ -24,7 +24,7 @@ use commands::vault::VaultCommand;
     after_long_help = "TOOL PASSTHROUGH:\n  \
         Run managed tools directly: diegops <tool> <args>\n  \
         Example: diegops gh pr list, diegops jq '.name' file.json\n  \
-        Available: gh, vault, terraform, helm, k9s, kubectl, jq, yq, trivy, trip\n\n\
+        Available: gh, vault, bao, terraform, helm, k9s, kubectl, jq, yq, trivy, trip\n\n\
         Run 'diegops <command> --help' for details on any command.",
     disable_help_subcommand = true
 )]
@@ -172,7 +172,7 @@ enum Commands {
     #[command(
         long_about = "Manage DevOps CLI tools — install, update, and remove.\n\n\
         All binaries stored in ~/.diegops/bin/\n\
-        Available: gh, vault, terraform, helm, k9s, kubectl, jq, yq, trivy, trippy\n\n\
+        Available: gh, vault, bao, terraform, helm, k9s, kubectl, jq, yq, trivy, trippy\n\n\
         Usage:\n  \
         diegops tool list              # show available tools\n  \
         diegops tool install <name>    # install a tool\n  \
@@ -201,7 +201,7 @@ enum Commands {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
-    /// Run a managed tool directly (gh, vault, terraform, helm, k9s, kubectl, jq, yq, trivy, trip)
+    /// Run a managed tool directly (gh, vault, bao, terraform, helm, k9s, kubectl, jq, yq, trivy, trip)
     #[command(external_subcommand)]
     External(Vec<String>),
 }
