@@ -13,6 +13,7 @@ pub mod devtools;
 pub mod devtools_git;
 pub mod devtools_gpg;
 pub mod devtools_ssh;
+pub mod explain;
 pub mod ktool;
 pub mod kv;
 pub mod repo;
