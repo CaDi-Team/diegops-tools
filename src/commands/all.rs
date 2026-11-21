@@ -72,7 +72,7 @@ fn pull_steps() -> Vec<Step> {
             || super::agents::restore_missing(),
         ),
         ("Configuring shell", "Shell configured", || {
-            super::shell::init()
+            super::shell::init(false, false)
         }),
     ]
 }

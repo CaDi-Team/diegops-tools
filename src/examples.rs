@@ -22,7 +22,7 @@ pub const EXAMPLES: &[(&str, &str)] = &[
     ("auth status", "diegops auth status"),
     ("auth logout", "diegops auth logout         # remove every stored token"),
     ("shell", "diegops shell init"),
-    ("shell init", "diegops shell init          # install zsh + oh-my-zsh + plugins, write config"),
+    ("shell init", "diegops shell init --dry-run   # see what would change\ndiegops shell init             # install zsh + oh-my-zsh + plugins, write config\ndiegops shell init --yes       # no questions (scripts, containers)"),
     ("vault", "diegops vault init          # sample ~/.diegops/repo-vault.yaml\ndiegops vault apply         # write every .env from the secrets backend\ndiegops vault list-diff     # which .env files are missing"),
     ("vault apply", "diegops vault apply\ndiegops vault apply --path ~/github/acme    # only targets under this folder"),
     ("vault list", "diegops vault list"),

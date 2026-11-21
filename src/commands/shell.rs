@@ -9,7 +9,27 @@ use std::process::Command;
 #[derive(Subcommand)]
 pub enum ShellCommand {
     /// Set up zsh, oh-my-zsh, plugins, and managed shell config
-    Init,
+    #[command(
+        long_about = "Set up zsh, oh-my-zsh, plugins, and the diegops managed shell config.\n\n\
+        What it changes (each step is skipped when already done):\n  \
+        1. installs zsh with your package manager (sudo apt-get/dnf/rpm-ostree/apk, or brew)\n  \
+        2. makes zsh your login shell (chsh -s)\n  \
+        3. clones oh-my-zsh into ~/.oh-my-zsh\n  \
+        4. clones zsh-autosuggestions and zsh-syntax-highlighting into ~/.oh-my-zsh/custom/plugins\n  \
+        5. writes ~/.diegops/shell/diegops.zsh (overwritten on every run)\n  \
+        6. appends one source line to ~/.zshrc (your own lines are kept)\n  \
+        7. if ~/.bashrc exists: writes ~/.diegops/shell/diegops.bash and appends a source line\n\n\
+        Run with --dry-run first to see exactly what would happen. In a terminal it asks\n\
+        before using sudo or chsh; --yes skips the questions."
+    )]
+    Init {
+        /// Print what would be done and change nothing
+        #[arg(short = 'n', long)]
+        dry_run: bool,
+        /// Do not ask before installing packages or changing the login shell
+        #[arg(short, long)]
+        yes: bool,
+    },
 }
 
 const ZSH_CONFIG: &str = "\
@@ -81,16 +101,162 @@ const BASH_SOURCE_MARKER: &str = "diegops/shell/diegops.bash";
 
 /// Sets up the shell environment: installs zsh, oh-my-zsh, custom plugins,
 /// writes managed config files, and injects source lines.
-pub fn init() -> Result<(), Box<dyn std::error::Error>> {
+const PLUGINS: &[(&str, &str)] = &[
+    (
+        "zsh-autosuggestions",
+        "https://github.com/zsh-users/zsh-autosuggestions.git",
+    ),
+    (
+        "zsh-syntax-highlighting",
+        "https://github.com/zsh-users/zsh-syntax-highlighting.git",
+    ),
+];
+
+/// Package-manager command that installs zsh, if one is available.
+fn zsh_install_cmds() -> Option<Vec<Vec<&'static str>>> {
+    if command_exists("apt-get") {
+        Some(vec![
+            vec!["sudo", "apt-get", "update", "-qq"],
+            vec!["sudo", "apt-get", "install", "-y", "zsh"],
+        ])
+    } else if command_exists("brew") {
+        Some(vec![vec!["brew", "install", "zsh"]])
+    } else if command_exists("rpm-ostree") {
+        // Immutable Fedora (Bazzite, Silverblue, Kinoite): rpm-ostree layers packages
+        // atomically on top of the read-only base image. --idempotent skips if already
+        // installed; --apply-live applies the change to the running system without reboot.
+        Some(vec![vec![
+            "sudo",
+            "rpm-ostree",
+            "install",
+            "--idempotent",
+            "--apply-live",
+            "zsh",
+        ]])
+    } else if command_exists("dnf") {
+        Some(vec![vec!["sudo", "dnf", "install", "-y", "zsh"]])
+    } else if command_exists("apk") {
+        Some(vec![vec!["sudo", "apk", "add", "zsh"]])
+    } else {
+        None
+    }
+}
+
+/// Describes what `init` would do on this machine, without changing anything.
+pub fn plan(home: &Path) -> Vec<String> {
+    let tilde = |p: &Path| p.display().to_string();
+    let mut out = Vec::new();
+    out.push(if command_exists("zsh") {
+        "[1/7] zsh: already installed".to_string()
+    } else {
+        match zsh_install_cmds() {
+            Some(cmds) => format!(
+                "[1/7] zsh: would run: {}",
+                cmds.iter()
+                    .map(|c| c.join(" "))
+                    .collect::<Vec<_>>()
+                    .join(" && ")
+            ),
+            None => "[1/7] zsh: not found and no package manager detected (install it by hand)"
+                .to_string(),
+        }
+    });
+    let shell = std::env::var("SHELL").unwrap_or_default();
+    out.push(if shell.ends_with("/zsh") {
+        "[2/7] login shell: already zsh".to_string()
+    } else {
+        let zsh = which("zsh").unwrap_or_else(|| "/usr/bin/zsh".to_string());
+        format!("[2/7] login shell: would run: chsh -s {zsh}")
+    });
+    let omz = home.join(".oh-my-zsh");
+    out.push(if omz.exists() {
+        "[3/7] oh-my-zsh: already installed".to_string()
+    } else {
+        format!(
+            "[3/7] oh-my-zsh: would run: git clone --depth=1 https://github.com/ohmyzsh/ohmyzsh.git {}",
+            tilde(&omz)
+        )
+    });
+    let plugins = omz.join("custom").join("plugins");
+    let missing: Vec<&str> = PLUGINS
+        .iter()
+        .filter(|(n, _)| !plugins.join(n).exists())
+        .map(|(n, _)| *n)
+        .collect();
+    out.push(if missing.is_empty() {
+        "[4/7] plugins: already installed".to_string()
+    } else {
+        format!(
+            "[4/7] plugins: would clone {} into {}",
+            missing.join(", "),
+            tilde(&plugins)
+        )
+    });
+    let shell_dir = home.join(".diegops").join("shell");
+    out.push(format!(
+        "[5/7] managed config: would write {}",
+        tilde(&shell_dir.join("diegops.zsh"))
+    ));
+    let rc_line = |rc: &Path, marker: &str| {
+        let present = fs::read_to_string(rc)
+            .map(|c| c.contains(marker))
+            .unwrap_or(false);
+        if present {
+            format!("source line already in {}", tilde(rc))
+        } else {
+            format!("would append source line to {}", tilde(rc))
+        }
+    };
+    out.push(format!(
+        "[6/7] .zshrc: {}",
+        rc_line(&home.join(".zshrc"), ZSH_SOURCE_MARKER)
+    ));
+    let bashrc = home.join(".bashrc");
+    out.push(if bashrc.exists() {
+        format!(
+            "[7/7] bash: would write {}; {}",
+            tilde(&shell_dir.join("diegops.bash")),
+            rc_line(&bashrc, BASH_SOURCE_MARKER).replace("would ", "")
+        )
+    } else {
+        "[7/7] bash: skipped (no ~/.bashrc)".to_string()
+    });
+    out
+}
+
+/// Asks a yes/no question on the terminal; default yes. Non-interactive → yes.
+fn confirm(question: &str, assume_yes: bool) -> bool {
+    use std::io::{BufRead, IsTerminal, Write};
+    if assume_yes || !std::io::stdin().is_terminal() {
+        return true;
+    }
+    eprint!("\n  {question} [Y/n] ");
+    let _ = std::io::stderr().flush();
+    let mut answer = String::new();
+    if std::io::stdin().lock().read_line(&mut answer).is_err() {
+        return false;
+    }
+    !matches!(answer.trim().to_lowercase().as_str(), "n" | "no")
+}
+
+pub fn init(dry_run: bool, yes: bool) -> Result<(), Box<dyn std::error::Error>> {
     let home = super::common::home_dir()?;
+    if dry_run {
+        println!("diegops shell init — dry run (nothing is changed)\n");
+        for line in plan(&home) {
+            println!("  {line}");
+        }
+        println!("\nRun 'diegops shell init' to apply.");
+        return Ok(());
+    }
 
     // Step 1: Check/install zsh
     eprint!("[1/7] Checking zsh ... ");
-    ensure_zsh()?;
+    ensure_zsh(yes)?;
 
     // Step 2: Check/set default shell
     eprint!("[2/7] Checking default shell ... ");
-    ensure_default_shell();
+    ensure_default_shell(yes);
 
     // Step 3: Check/install oh-my-zsh
     eprint!("[3/7] Checking oh-my-zsh ... ");
@@ -118,47 +284,29 @@ pub fn init() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Checks if zsh is installed; installs it if not.
-fn ensure_zsh() -> Result<(), Box<dyn std::error::Error>> {
+fn ensure_zsh(yes: bool) -> Result<(), Box<dyn std::error::Error>> {
     if command_exists("zsh") {
         eprintln!("OK (already installed)");
         return Ok(());
     }
-
-    if command_exists("apt-get") {
-        run_cmd("sudo", &["apt-get", "update", "-qq"])?;
-        run_cmd("sudo", &["apt-get", "install", "-y", "zsh"])?;
-    } else if command_exists("brew") {
-        run_cmd("brew", &["install", "zsh"])?;
-    } else if command_exists("rpm-ostree") {
-        // Immutable Fedora (Bazzite, Silverblue, Kinoite): rpm-ostree layers packages
-        // atomically on top of the read-only base image. --idempotent skips if already
-        // installed; --apply-live applies the change to the running system without reboot.
-        run_cmd(
-            "sudo",
-            &[
-                "rpm-ostree",
-                "install",
-                "--idempotent",
-                "--apply-live",
-                "zsh",
-            ],
-        )?;
-    } else if command_exists("dnf") {
-        run_cmd("sudo", &["dnf", "install", "-y", "zsh"])?;
-    } else if command_exists("apk") {
-        run_cmd("sudo", &["apk", "add", "zsh"])?;
-    } else {
+    let cmds = zsh_install_cmds()
+        .ok_or("zsh not found and no supported package manager detected. Install zsh manually.")?;
+    let shown: Vec<String> = cmds.iter().map(|c| c.join(" ")).collect();
+    if !confirm(&format!("Install zsh with: {}?", shown.join(" && ")), yes) {
         return Err(
-            "zsh not found and no supported package manager detected. Install zsh manually.".into(),
+            "zsh install cancelled\n  hint: install zsh yourself, then rerun 'diegops shell init'"
+                .into(),
         );
     }
-
+    for c in &cmds {
+        run_cmd(c[0], &c[1..])?;
+    }
     eprintln!("INSTALLED");
     Ok(())
 }
 
 /// Checks if zsh is the default shell; sets it if not.
-fn ensure_default_shell() {
+fn ensure_default_shell(yes: bool) {
     let current_shell = std::env::var("SHELL").unwrap_or_default();
     if current_shell.ends_with("/zsh") {
         eprintln!("OK (already zsh)");
@@ -166,6 +314,13 @@ fn ensure_default_shell() {
     }
 
     let zsh_path = which("zsh").unwrap_or_else(|| "/usr/bin/zsh".to_string());
+    if !confirm(
+        &format!("Make zsh your login shell (chsh -s {zsh_path})?"),
+        yes,
+    ) {
+        eprintln!("SKIP (kept {current_shell})");
+        return;
+    }
     match run_cmd("chsh", &["-s", &zsh_path]) {
         Ok(()) => eprintln!("OK (set to zsh)"),
         Err(e) => eprintln!("warning: could not set default shell: {e}"),
@@ -197,19 +352,8 @@ fn ensure_ohmyzsh(home: &Path) -> Result<(), Box<dyn std::error::Error>> {
 fn ensure_custom_plugins(home: &Path) {
     let custom_dir = home.join(".oh-my-zsh").join("custom").join("plugins");
 
-    let plugins = [
-        (
-            "zsh-autosuggestions",
-            "https://github.com/zsh-users/zsh-autosuggestions.git",
-        ),
-        (
-            "zsh-syntax-highlighting",
-            "https://github.com/zsh-users/zsh-syntax-highlighting.git",
-        ),
-    ];
-
     let mut results: Vec<String> = Vec::new();
-    for (name, url) in &plugins {
+    for (name, url) in PLUGINS {
         let dest = custom_dir.join(name);
         if dest.exists() {
             results.push(format!("OK {name}"));
