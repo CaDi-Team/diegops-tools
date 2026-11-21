@@ -760,3 +760,71 @@ fn kv_backend_says_when_config_is_missing() {
         "got: {stdout}"
     );
 }
+
+// --- #39: help discoverability ---------------------------------------------
+
+#[test]
+fn help_subcommand_shows_nested_command_help() {
+    let output = diegops()
+        .args(["help", "repo", "apply"])
+        .output()
+        .expect("run");
+    assert!(output.status.success(), "{output:?}");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Usage: diegops repo apply"),
+        "got: {stdout}"
+    );
+}
+
+#[test]
+fn help_for_unknown_command_is_usage_error() {
+    let output = diegops().args(["help", "nope"]).output().expect("run");
+    assert_eq!(output.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.starts_with("error: unknown command 'nope'"),
+        "got: {stderr}"
+    );
+}
+
+#[test]
+fn typo_in_top_level_command_suggests_closest() {
+    let output = diegops().arg("secret").output().expect("run");
+    assert_eq!(output.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("did you mean 'secrets'?"), "got: {stderr}");
+}
+
+#[test]
+fn typo_in_tool_name_suggests_tool() {
+    let output = diegops().arg("kubctl").output().expect("run");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("did you mean 'kubectl'?"), "got: {stderr}");
+}
+
+#[test]
+fn top_level_help_groups_commands() {
+    let output = diegops().arg("--help").output().expect("run");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for heading in [
+        "Get started:",
+        "Secrets:",
+        "Workspace:",
+        "Tools:",
+        "AI agents:",
+        "About:",
+    ] {
+        assert!(stdout.contains(heading), "missing {heading} in: {stdout}");
+    }
+}
+
+#[test]
+fn version_flag_and_subcommand_match() {
+    let a = diegops().arg("version").output().expect("run");
+    let b = diegops().arg("--version").output().expect("run");
+    assert_eq!(
+        String::from_utf8_lossy(&a.stdout),
+        String::from_utf8_lossy(&b.stdout)
+    );
+}

@@ -263,6 +263,16 @@ fn find_tool(name: &str) -> Option<&'static ToolDef> {
 }
 
 /// Returns `true` if `name` matches a known tool name or binary name.
+/// Names users can type to run a managed tool (name and binary name).
+pub fn tool_names() -> Vec<String> {
+    let mut v: Vec<String> = REGISTRY
+        .iter()
+        .flat_map(|t| [t.name.to_string(), t.binary_name.to_string()])
+        .collect();
+    v.dedup();
+    v
+}
+
 pub fn is_known_tool(name: &str) -> bool {
     find_tool(name).is_some()
 }

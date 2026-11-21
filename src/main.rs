@@ -1,7 +1,8 @@
 mod commands;
+mod help;
 mod secrets_backend;
 
-use clap::{CommandFactory, Parser, Subcommand};
+use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use commands::all::AllCommand;
 use commands::auth::{AuthCommand, GhCommand};
 use commands::devtools::{DevtoolsCommand, GitCommand, GpgCommand, SshCommand};
@@ -15,7 +16,7 @@ use commands::vault::VaultCommand;
 #[derive(Parser)]
 #[command(
     name = "diegops",
-    version,
+    version = concat!("v", env!("CARGO_PKG_VERSION")),
     about = "diegops — personal productivity CLI for humans and containers",
     long_about = "diegops — personal productivity CLI for humans and containers\n\n\
         Workspace management, secret injection, cloud config sync,\n\
@@ -25,14 +26,14 @@ use commands::vault::VaultCommand;
         Run managed tools directly: diegops <tool> <args>\n  \
         Example: diegops gh pr list, diegops jq '.name' file.json\n  \
         Available: gh, vault, bao, terraform, helm, k9s, kubectl, jq, yq, trivy, trip\n\n\
-        Run 'diegops <command> --help' for details on any command.\n\n\
+        Run 'diegops help <command>' or 'diegops <command> --help' for details.\n\n\
         EXIT CODES:\n  \
         0  success\n  \
         1  the command failed (message starts with 'error:')\n  \
         2  usage error: unknown command, bad flag or argument",
     disable_help_subcommand = true
 )]
-struct Cli {
+pub(crate) struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
 }
@@ -41,8 +42,12 @@ struct Cli {
 enum Commands {
     /// Print version information
     Version,
-    /// Show help and available commands
-    Help,
+    /// Show help for diegops or for a command (e.g. diegops help repo apply)
+    Help {
+        /// Command path, e.g. `repo apply`
+        #[arg(trailing_var_arg = true)]
+        command: Vec<String>,
+    },
     /// Update diegops to the latest released version
     #[command(long_about = "Update diegops to the latest released version.\n\n\
         Downloads the latest release from GitHub, replaces the current binary\n\
@@ -250,13 +255,31 @@ fn render_error(msg: &str) -> String {
 }
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let cli = Cli::parse();
+    let cmd = Cli::command();
+    let cmd = cmd.clone().help_template(help::template(&cmd));
+    let cli = Cli::from_arg_matches(&cmd.get_matches()).unwrap_or_else(|e| e.exit());
     match cli.command {
         Some(Commands::Version) => {
             println!("diegops v{}", env!("CARGO_PKG_VERSION"));
         }
-        Some(Commands::Help) | None => {
-            Cli::command().print_long_help()?;
+        Some(Commands::Help { command }) if !command.is_empty() => {
+            let root = Cli::command();
+            if let Err((bad, names, help_cmd)) = help::check_path(&root, &command) {
+                eprintln!("{}", help::unknown_command(&bad, &names, &help_cmd));
+                std::process::exit(2);
+            }
+            let mut argv = vec!["diegops".to_string()];
+            argv.extend(command);
+            argv.push("--help".to_string());
+            if let Err(e) = root.try_get_matches_from(argv) {
+                e.exit();
+            }
+        }
+        Some(Commands::Help { .. }) | None => {
+            let root = Cli::command();
+            root.clone()
+                .help_template(help::template(&root))
+                .print_long_help()?;
             println!();
         }
         Some(Commands::Update) => {
@@ -437,8 +460,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 if commands::tool::is_known_tool(name) {
                     commands::tool::passthrough(name, &args[1..])?;
                 } else {
-                    eprintln!("error: unknown command '{name}'");
-                    eprintln!("  hint: run 'diegops --help' to see available commands");
+                    let mut names = help::visible_names(&Cli::command());
+                    names.extend(commands::tool::tool_names());
+                    eprintln!("{}", help::unknown_command(name, &names, "diegops --help"));
                     std::process::exit(2);
                 }
             }
