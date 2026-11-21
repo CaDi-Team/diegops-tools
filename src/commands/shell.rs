@@ -16,7 +16,8 @@ pub enum ShellCommand {
         2. makes zsh your login shell (chsh -s)\n  \
         3. clones oh-my-zsh into ~/.oh-my-zsh\n  \
         4. clones zsh-autosuggestions and zsh-syntax-highlighting into ~/.oh-my-zsh/custom/plugins\n  \
-        5. writes ~/.diegops/shell/diegops.zsh (overwritten on every run)\n  \
+        5. writes ~/.diegops/shell/diegops.zsh (overwritten on every run; your own\n     \
+           aliases go in ~/.diegops/shell/aliases.zsh, loaded and never overwritten)\n  \
         6. appends one source line to ~/.zshrc (your own lines are kept)\n  \
         7. if ~/.bashrc exists: writes ~/.diegops/shell/diegops.bash and appends a source line\n\n\
         Run with --dry-run first to see exactly what would happen. In a terminal it asks\n\
@@ -62,9 +63,10 @@ export PATH=\"$HOME/.diegops/bin:$HOME/.local/bin:$PATH\"
 export KUBECONFIG=$(find ~/.kube -maxdepth 1 -type f \\( -name \"*.yaml\" -o -name \"*.yml\" -o -name \"config\" \\) 2>/dev/null | tr '\\n' ':' | sed 's/:$//')
 
 # -- Aliases --------------------------------------------------------------------
-alias code='code-insiders'
-alias cc='claude --dangerously-skip-permissions'
 alias k='kubectl'
+
+# -- Personal additions (yours; synced by 'diegops sync', never overwritten) -------
+[ -f \"$HOME/.diegops/shell/aliases.zsh\" ] && source \"$HOME/.diegops/shell/aliases.zsh\"
 
 # -- Completions ----------------------------------------------------------------
 command -v diegops >/dev/null && source <(diegops completion zsh)
@@ -82,9 +84,10 @@ export PATH=\"$HOME/.diegops/bin:$HOME/.local/bin:$PATH\"
 export KUBECONFIG=$(find ~/.kube -maxdepth 1 -type f \\( -name \"*.yaml\" -o -name \"*.yml\" -o -name \"config\" \\) 2>/dev/null | tr '\\n' ':' | sed 's/:$//')
 
 # -- Aliases --------------------------------------------------------------------
-alias code='code-insiders'
-alias cc='claude --dangerously-skip-permissions'
 alias k='kubectl'
+
+# -- Personal additions (yours; synced by 'diegops sync', never overwritten) -------
+[ -f \"$HOME/.diegops/shell/aliases.bash\" ] && source \"$HOME/.diegops/shell/aliases.bash\"
 
 # -- Completions ----------------------------------------------------------------
 command -v diegops >/dev/null && source <(diegops completion bash)
@@ -367,11 +370,58 @@ fn ensure_custom_plugins(home: &Path) {
     eprintln!("{}", results.join(", "));
 }
 
+/// Aliases that older versions forced on everyone; kept per user on upgrade.
+const OLD_PERSONAL_ALIASES: &[&str] = &[
+    "alias code='code-insiders'",
+    "alias cc='claude --dangerously-skip-permissions'",
+];
+
+/// From an old managed config, the personal aliases it contained (if any).
+fn carry_over_aliases(old_managed: &str) -> Option<String> {
+    let found: Vec<&str> = OLD_PERSONAL_ALIASES
+        .iter()
+        .copied()
+        .filter(|a| old_managed.lines().any(|l| l.trim() == *a))
+        .collect();
+    if found.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "# Personal aliases — yours to edit. Loaded by the diegops managed config,\n\
+         # synced by 'diegops sync', never overwritten by 'diegops shell init'.\n\
+         # Moved here from the managed config by diegops (they used to apply to everyone).\n{}\n",
+        found.join("\n")
+    ))
+}
+
+/// Before overwriting the managed file, moves its old personal aliases to
+/// ~/.diegops/shell/aliases.<shell> (only if that file does not exist yet).
+fn migrate_personal_aliases(home: &Path, shell: &str) {
+    let dir = home.join(".diegops").join("shell");
+    let personal = dir.join(format!("aliases.{shell}"));
+    if personal.exists() {
+        return;
+    }
+    let Ok(old) = fs::read_to_string(dir.join(format!("diegops.{shell}"))) else {
+        return;
+    };
+    if let Some(text) = carry_over_aliases(&old) {
+        match fs::write(&personal, text) {
+            Ok(()) => eprintln!(
+                "\n  note: your aliases (cc, code) moved to {}; edit or delete it there",
+                personal.display()
+            ),
+            Err(e) => eprintln!("\n  warning: could not write {}: {e}", personal.display()),
+        }
+    }
+}
+
 /// Writes the managed zsh config file.
 fn write_managed_config(home: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let shell_dir = home.join(".diegops").join("shell");
     fs::create_dir_all(&shell_dir)?;
 
+    migrate_personal_aliases(home, "zsh");
     let zsh_path = shell_dir.join("diegops.zsh");
     fs::write(&zsh_path, ZSH_CONFIG)?;
     eprintln!("OK ({})", zsh_path.display());
@@ -421,6 +471,7 @@ fn setup_bash(home: &Path) {
     }
 
     let bash_path = shell_dir.join("diegops.bash");
+    migrate_personal_aliases(home, "bash");
     if let Err(e) = fs::write(&bash_path, BASH_CONFIG) {
         eprintln!("warning: could not write diegops.bash: {e}");
         return;
@@ -509,6 +560,51 @@ fn run_cmd(program: &str, args: &[&str]) -> Result<(), Box<dyn std::error::Error
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn managed_configs_have_no_personal_aliases() {
+        for c in [super::ZSH_CONFIG, super::BASH_CONFIG] {
+            assert!(!c.contains("--dangerously"), "unsafe alias");
+            assert!(!c.contains("code-insiders"), "personal alias");
+            assert!(
+                c.contains(".diegops/shell/aliases."),
+                "no personal aliases hook"
+            );
+        }
+    }
+
+    #[test]
+    fn old_managed_aliases_are_carried_to_the_personal_file() {
+        let old = "alias code='code-insiders'\nalias cc='claude --dangerously-skip-permissions'\nalias k='kubectl'\n";
+        let kept = super::carry_over_aliases(old).expect("migrated");
+        assert!(kept.contains("alias code='code-insiders'"));
+        assert!(kept.contains("alias cc='claude --dangerously-skip-permissions'"));
+        assert!(!kept.contains("alias k="));
+        assert!(super::carry_over_aliases(super::ZSH_CONFIG).is_none());
+        assert!(super::carry_over_aliases("").is_none());
+    }
+
+    #[test]
+    fn migration_writes_aliases_once() {
+        let home = std::env::temp_dir().join(format!("diegops-alias-{}", std::process::id()));
+        let dir = home.join(".diegops/shell");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("diegops.zsh"),
+            "alias cc='claude --dangerously-skip-permissions'\n",
+        )
+        .unwrap();
+        super::migrate_personal_aliases(&home, "zsh");
+        let a = std::fs::read_to_string(dir.join("aliases.zsh")).unwrap();
+        assert!(a.contains("alias cc="));
+        std::fs::write(dir.join("aliases.zsh"), "# mine\n").unwrap();
+        super::migrate_personal_aliases(&home, "zsh");
+        assert_eq!(
+            std::fs::read_to_string(dir.join("aliases.zsh")).unwrap(),
+            "# mine\n"
+        );
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
     #[test]
     fn managed_configs_load_completions() {
         assert!(super::ZSH_CONFIG.contains("diegops completion zsh"));
