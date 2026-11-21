@@ -186,7 +186,7 @@ fn load_config(path: Option<&Path>) -> Result<SecretsConfig, Box<dyn std::error:
     let config_path =
         super::common::resolve_config_path(path, "DIEGOPS_SECRETS_CONFIG", "secrets.yaml")?;
     let content = super::common::read_config_file(&config_path)?;
-    let config: SecretsConfig = serde_yaml::from_str(&content)
+    let config: SecretsConfig = serde_norway::from_str(&content)
         .map_err(|e| format!("invalid secrets config {}: {e}", config_path.display()))?;
 
     // Validate KeySelector::All values — must be exactly "*"
@@ -948,7 +948,7 @@ fn try_load_secrets_config(
         return Ok(None);
     }
     let content = super::common::read_config_file(&config_path)?;
-    let config: SecretsConfig = serde_yaml::from_str(&content)
+    let config: SecretsConfig = serde_norway::from_str(&content)
         .map_err(|e| format!("invalid secrets config {}: {e}", config_path.display()))?;
     Ok(Some(config))
 }
@@ -1103,7 +1103,7 @@ folders:
       - name: database.env
       - name: api.env
 "#;
-        let config: SecretsConfig = serde_yaml::from_str(yaml).unwrap();
+        let config: SecretsConfig = serde_norway::from_str(yaml).unwrap();
         assert_eq!(config.folders.len(), 1);
         match &config.folders[0].keys {
             KeySelector::List(entries) => {
@@ -1123,7 +1123,7 @@ folders:
     vault_path: secret/app
     keys: "*"
 "#;
-        let config: SecretsConfig = serde_yaml::from_str(yaml).unwrap();
+        let config: SecretsConfig = serde_norway::from_str(yaml).unwrap();
         match &config.folders[0].keys {
             KeySelector::All(s) => assert_eq!(s, "*"),
             KeySelector::List(_) => panic!("expected All"),
@@ -1141,7 +1141,7 @@ folders:
         mode: "0600"
       - name: readme.txt
 "#;
-        let config: SecretsConfig = serde_yaml::from_str(yaml).unwrap();
+        let config: SecretsConfig = serde_norway::from_str(yaml).unwrap();
         match &config.folders[0].keys {
             KeySelector::List(entries) => {
                 assert_eq!(entries[0].name(), "database.env");
@@ -1162,7 +1162,7 @@ folders:
     keys:
       - name: database.env
 "#;
-        let config: SecretsConfig = serde_yaml::from_str(yaml).unwrap();
+        let config: SecretsConfig = serde_norway::from_str(yaml).unwrap();
         assert!(config.folders[0].dir_mode.is_none());
     }
 
@@ -1176,7 +1176,7 @@ folders:
     keys:
       - name: database.env
 "#;
-        let config: SecretsConfig = serde_yaml::from_str(yaml).unwrap();
+        let config: SecretsConfig = serde_norway::from_str(yaml).unwrap();
         assert_eq!(config.folders[0].dir_mode.as_deref(), Some("0700"));
     }
 

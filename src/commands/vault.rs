@@ -98,7 +98,7 @@ fn load_config(path: Option<&Path>) -> Result<VaultConfig, Box<dyn std::error::E
     let config_path =
         super::common::resolve_config_path(path, "DIEGOPS_VAULT_CONFIG", "repo-vault.yaml")?;
     let content = super::common::read_config_file(&config_path)?;
-    let config: VaultConfig = serde_yaml::from_str(&content)
+    let config: VaultConfig = serde_norway::from_str(&content)
         .map_err(|e| format!("invalid vault config {}: {e}", config_path.display()))?;
 
     // Validate KeySelector::All values — must be exactly "*"
@@ -471,7 +471,7 @@ targets:
           - username
           - password
 "#;
-        let config: VaultConfig = serde_yaml::from_str(yaml).unwrap();
+        let config: VaultConfig = serde_norway::from_str(yaml).unwrap();
         assert_eq!(config.targets.len(), 1);
         assert_eq!(config.targets[0].secrets.len(), 1);
         match &config.targets[0].secrets[0].keys {
@@ -489,7 +489,7 @@ targets:
       - vault_path: secret/app/api
         keys: "*"
 "#;
-        let config: VaultConfig = serde_yaml::from_str(yaml).unwrap();
+        let config: VaultConfig = serde_norway::from_str(yaml).unwrap();
         match &config.targets[0].secrets[0].keys {
             KeySelector::All(s) => assert_eq!(s, "*"),
             KeySelector::List(_) => panic!("expected All"),
