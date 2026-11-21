@@ -1,11 +1,12 @@
 //! The `diegops all` command — a single push/pull orchestrator across
-//! `repo`, `secrets`, `vault`, and `sync`.
+//! `repo`, `secrets`, `vault` (.env injection), `agents`, and `sync`.
 //!
 //! `all pull` runs, in dependency-correct order: cloud config sync, SSH key
 //! restore (needed before any repo can be cloned over SSH), repo cloning,
-//! team Vault secrets, the rest of the personal secret files, and shell
-//! setup. `all push` runs the two directions that have a push side:
-//! personal secret files, then the `~/.diegops/` config files themselves.
+//! `.env` injection from the secrets backend, the rest of the personal secret
+//! files, missing agent profiles, and shell setup. `all push` runs the
+//! directions that have a push side: personal secret files, agent context
+//! (`diegops agents`), then the `~/.diegops/` config files themselves.
 //!
 //! Every step runs even if an earlier one fails (continue-on-error), and a
 //! summary is printed at the end — this matches the existing `bootstrap`
@@ -32,9 +33,9 @@ pub struct StepResult {
 /// Unified push/pull sub-commands.
 #[derive(clap::Subcommand)]
 pub enum AllCommand {
-    /// Pull everything: cloud config, SSH keys, repos, vault secrets, workstation files, shell.
+    /// Pull everything: cloud config, SSH keys, repos, .env secrets, workstation files, agents, shell.
     Pull,
-    /// Push everything: personal secret files, then the ~/.diegops config.
+    /// Push everything: personal secret files, agent context, then the ~/.diegops config.
     Push,
 }
 
@@ -57,13 +58,18 @@ fn pull_steps() -> Vec<Step> {
         ("Cloning repositories", "Repositories cloned", || {
             super::repo::apply(None, None)
         }),
-        ("Injecting vault secrets", "Vault secrets injected", || {
+        ("Injecting .env secrets", ".env secrets injected", || {
             super::vault::apply(None, None)
         }),
         (
             "Restoring workstation files",
             "Workstation files restored",
             || super::secrets::pull(None, None),
+        ),
+        (
+            "Restoring missing agent profiles",
+            "Agent context restored",
+            || super::agents::restore_missing(),
         ),
         ("Configuring shell", "Shell configured", || {
             super::shell::init()
@@ -77,6 +83,11 @@ fn push_steps() -> Vec<Step> {
         ("Pushing secret files", "Secret files pushed", || {
             super::secrets::push(None, None)
         }),
+        (
+            "Backing up agent context",
+            "Agent context backed up",
+            || super::agents::backup_registered(),
+        ),
         ("Pushing config to cloud", "Config pushed to cloud", || {
             super::sync::push()
         }),
@@ -85,7 +96,7 @@ fn push_steps() -> Vec<Step> {
 
 /// Pulls everything needed to make a workstation usable, in dependency order.
 ///
-/// GitHub and Vault auth are verified up front (fatal — returns immediately
+/// GitHub auth and the secrets backend are verified up front (fatal — returns immediately
 /// on failure, before running any step). The six sync steps that follow
 /// continue past individual failures; check the returned results for
 /// per-step outcomes.
@@ -94,9 +105,9 @@ pub fn pull() -> Result<Vec<StepResult>, Box<dyn std::error::Error>> {
     let gh_user = check_github()?;
     eprintln!("OK ({gh_user})");
 
-    eprint!("Checking Vault CLI ... ");
-    check_vault()?;
-    eprintln!("OK");
+    eprint!("Checking secrets backend ... ");
+    let backend = check_secrets_backend()?;
+    eprintln!("OK ({backend})");
 
     Ok(run_steps(&pull_steps()))
 }
@@ -203,10 +214,9 @@ fn check_github() -> Result<String, Box<dyn std::error::Error>> {
     }
 }
 
-/// Verifies Vault CLI is available and authenticated.
-fn check_vault() -> Result<(), Box<dyn std::error::Error>> {
-    crate::secrets_backend::open(None)?;
-    Ok(())
+/// Verifies the configured secrets backend (Infisical, OpenBao…) opens.
+fn check_secrets_backend() -> Result<&'static str, Box<dyn std::error::Error>> {
+    Ok(crate::secrets_backend::open(None)?.name())
 }
 
 #[cfg(test)]
@@ -291,8 +301,9 @@ mod tests {
                 "Config synced from cloud",
                 "SSH keys restored",
                 "Repositories cloned",
-                "Vault secrets injected",
+                ".env secrets injected",
                 "Workstation files restored",
+                "Agent context restored",
                 "Shell configured",
             ]
         );
@@ -303,7 +314,11 @@ mod tests {
         let labels: Vec<&str> = push_steps().iter().map(|(_, label, _)| *label).collect();
         assert_eq!(
             labels,
-            vec!["Secret files pushed", "Config pushed to cloud"]
+            vec![
+                "Secret files pushed",
+                "Agent context backed up",
+                "Config pushed to cloud"
+            ]
         );
     }
 }

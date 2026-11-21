@@ -347,6 +347,7 @@ dependencies = [
  "flate2",
  "humantime",
  "mockito",
+ "regex",
  "rustls",
  "rustls-pki-types",
  "serde",
