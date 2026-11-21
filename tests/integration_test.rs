@@ -868,3 +868,54 @@ fn man_page_is_roff() {
     );
     assert!(stdout.contains("bootstrap"));
 }
+
+// --- #42: explain -----------------------------------------------------------
+
+#[test]
+fn explain_lists_terms() {
+    let output = diegops().arg("explain").output().expect("run");
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for t in ["backend", "infisical", "machine-identity", "pat", "kv"] {
+        assert!(stdout.contains(t), "missing {t}: {stdout}");
+    }
+}
+
+#[test]
+fn explain_term_and_alias() {
+    for term in ["machine-identity", "Machine Identity", "client-secret"] {
+        let output = diegops().args(["explain", term]).output().expect("run");
+        assert!(output.status.success(), "{term}");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("Client ID"), "{term}: {stdout}");
+        assert!(stdout.contains("https://"), "{term}: no link");
+    }
+}
+
+#[test]
+fn explain_unknown_term_suggests() {
+    let output = diegops()
+        .args(["explain", "infisicl"])
+        .output()
+        .expect("run");
+    assert_eq!(output.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("did you mean 'infisical'?"), "{stderr}");
+}
+
+#[test]
+fn credential_errors_point_to_explain() {
+    let output = diegops()
+        .args(["kv", "get", "a/b"])
+        .env("DIEGOPS_CONFIG", "/nonexistent/diegops/config.toml")
+        .env("DIEGOPS_SECRETS_BACKEND", "infisical")
+        .env_remove("INFISICAL_TOKEN")
+        .env_remove("INFISICAL_UNIVERSAL_AUTH_CLIENT_ID")
+        .output()
+        .expect("run");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("diegops explain machine-identity"),
+        "{stderr}"
+    );
+}

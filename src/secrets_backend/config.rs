@@ -242,7 +242,7 @@ pub fn resolve_infisical(
             .ok_or(
                 "no Infisical credentials found\n  \
                  hint: add client_id and client_secret_file under [infisical] in the config \
-                 (Infisical > Access Control > Machine Identities > Universal Auth)\n  \
+                 (see 'diegops explain machine-identity')\n  \
                  hint: or export INFISICAL_UNIVERSAL_AUTH_CLIENT_ID and \
                  INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET, or INFISICAL_TOKEN",
             )?;

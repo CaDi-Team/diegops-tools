@@ -43,6 +43,11 @@ pub(crate) struct Cli {
 enum Commands {
     /// Print version information
     Version,
+    /// Explain a term in plain words (backend, infisical, pat, …)
+    Explain {
+        /// Term to explain; omit to list all terms
+        term: Vec<String>,
+    },
     /// Print a shell completion script (bash, zsh, fish, powershell)
     #[command(long_about = "Print a shell completion script to stdout.\n\n\
         'diegops shell init' already loads it for zsh and bash. To load it by hand,\n\
@@ -276,6 +281,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let cmd = cmd.clone().help_template(help::template(&cmd));
     let cli = Cli::from_arg_matches(&cmd.get_matches()).unwrap_or_else(|e| e.exit());
     match cli.command {
+        Some(Commands::Explain { term }) => {
+            let t = term.join(" ");
+            commands::explain::run((!t.is_empty()).then_some(t.as_str()))?;
+        }
         Some(Commands::Completion { shell }) => {
             clap_complete::generate(shell, &mut cli_command(), "diegops", &mut std::io::stdout());
         }

@@ -6,7 +6,10 @@ use clap::Command;
 /// Top-level commands grouped by what a user is trying to do.
 /// Every visible subcommand must appear exactly once (enforced by a test).
 pub const GROUPS: &[(&str, &[&str])] = &[
-    ("Get started", &["bootstrap", "all", "auth", "shell"]),
+    (
+        "Get started",
+        &["bootstrap", "all", "auth", "shell", "explain"],
+    ),
     ("Secrets", &["vault", "secrets", "kv"]),
     ("Workspace", &["repo", "sync", "devtools"]),
     ("Tools", &["tool", "ktool"]),

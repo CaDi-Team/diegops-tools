@@ -91,7 +91,7 @@ pub fn with_config_hint(err: BoxError, path: &std::path::Path, exists: bool) -> 
     } else {
         format!("config file {} does not exist yet", path.display())
     };
-    format!("{err}\n  hint: {where_}\n  hint: see 'diegops kv --help' for how to set up a backend")
+    format!("{err}\n  hint: {where_}\n  hint: see 'diegops explain backend' and 'diegops kv --help' to set one up")
         .into()
 }
 
@@ -109,7 +109,7 @@ mod tests {
         .to_string();
         assert_eq!(
             out,
-            "no Infisical credentials: x\n  hint: config file /h/.config/diegops/config.toml does not exist yet\n  hint: see 'diegops kv --help' for how to set up a backend"
+            "no Infisical credentials: x\n  hint: config file /h/.config/diegops/config.toml does not exist yet\n  hint: see 'diegops explain backend' and 'diegops kv --help' to set one up"
         );
     }
 
