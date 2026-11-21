@@ -18,20 +18,20 @@ pub enum ToolCommand {
     /// List all available tools and their install status
     #[command(long_about = "List all available tools and their install status.\n\n\
         Shows: tool name, description, installed version, and status.\n\
-        Available tools: gh, vault, terraform, helm, k9s, kubectl, jq, yq, trivy, trippy")]
+        Available tools: gh, vault, bao, terraform, helm, k9s, kubectl, jq, yq, trivy, trippy")]
     List,
     /// Install a tool (downloads latest version)
     #[command(long_about = "Install a tool by downloading the latest version.\n\n\
         Binaries are stored in ~/.diegops/bin/\n\
         Idempotent — skips if already at the latest version.\n\n\
-        Available tools: gh, vault, terraform, helm, k9s, kubectl, jq, yq, trivy, trippy\n\n\
+        Available tools: gh, vault, bao, terraform, helm, k9s, kubectl, jq, yq, trivy, trippy\n\n\
         Examples:\n  \
         diegops tool install gh         # install GitHub CLI\n  \
         diegops tool install jq         # install jq\n  \
         diegops tool install kubectl    # install kubectl\n\n\
         After installing, use directly: diegops gh pr list")]
     Install {
-        /// Tool name (e.g., gh, vault, terraform, jq, kubectl)
+        /// Tool name (e.g., gh, vault, bao, terraform, jq, kubectl)
         name: String,
     },
     /// Update installed tools (all or specific)
@@ -49,7 +49,7 @@ pub enum ToolCommand {
     #[command(long_about = "Remove an installed tool from ~/.diegops/bin/\n\n\
         Example: diegops tool remove gh")]
     Remove {
-        /// Tool name (e.g., gh, vault, terraform)
+        /// Tool name (e.g., gh, vault, bao, terraform)
         name: String,
     },
 }
@@ -176,6 +176,15 @@ const REGISTRY: &[ToolDef] = &[
         format: ArchiveFormat::Zip,
     },
     ToolDef {
+        name: "bao",
+        description: "OpenBao (open-source Vault fork)",
+        source: ToolSource::GitHub {
+            repo: "openbao/openbao",
+        },
+        binary_name: "bao",
+        format: ArchiveFormat::TarGz,
+    },
+    ToolDef {
         name: "terraform",
         description: "HashiCorp Terraform",
         source: ToolSource::GitHub {
@@ -297,6 +306,9 @@ fn asset_name(tool: &ToolDef, version: &str) -> String {
 
         // vault_1.17.0_darwin_arm64.zip (no v prefix)
         "vault" => format!("vault_{v}_{os}_{arch}.zip"),
+
+        // openbao_2.7.3_linux_amd64.tar.gz (no v prefix; binary `bao` at root)
+        "bao" => format!("openbao_{v}_{os}_{arch}.tar.gz"),
 
         // terraform_1.9.0_darwin_arm64.zip (no v prefix)
         "terraform" => format!("terraform_{v}_{os}_{arch}.zip"),
@@ -830,8 +842,37 @@ mod tests {
     use super::*;
 
     #[test]
-    fn registry_has_10_tools() {
-        assert_eq!(REGISTRY.len(), 10);
+    fn registry_has_11_tools() {
+        assert_eq!(REGISTRY.len(), 11);
+    }
+
+    #[test]
+    fn vault_and_bao_are_both_available() {
+        assert!(find_tool("vault").is_some());
+        assert_eq!(find_tool("bao").map(|t| t.binary_name), Some("bao"));
+    }
+
+    #[test]
+    fn asset_name_bao() {
+        let tool = find_tool("bao").unwrap();
+        let name = asset_name(tool, "v2.7.3");
+        assert!(
+            name.starts_with("openbao_2.7.3_"),
+            "unexpected asset name: {name}"
+        );
+        assert!(name.ends_with(".tar.gz"), "unexpected asset name: {name}");
+    }
+
+    #[test]
+    fn download_url_bao() {
+        let tool = find_tool("bao").unwrap();
+        let url = download_url(tool, "v2.7.3");
+        assert!(
+            url.starts_with(
+                "https://github.com/openbao/openbao/releases/download/v2.7.3/openbao_2.7.3_"
+            ),
+            "unexpected url: {url}"
+        );
     }
 
     #[test]
