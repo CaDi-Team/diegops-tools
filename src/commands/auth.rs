@@ -29,9 +29,24 @@ pub enum AuthCommand {
 #[derive(clap::Subcommand)]
 pub enum GhCommand {
     /// Validate and store a GitHub personal access token
+    #[command(
+        long_about = "Validate and store a GitHub personal access token (PAT).\n\n\
+        diegops uses it for 'sync' (your private diegops-<user> repo) and to clone\n\
+        private repos. With no flags you are asked for it with hidden input.\n\n\
+        Create one (fine-grained, Contents: read and write on the repos you need):\n  \
+        https://github.com/settings/personal-access-tokens/new\n\
+        More: diegops explain pat"
+    )]
     Login {
-        /// GitHub personal access token (PAT)
-        token: String,
+        /// Read the token from stdin (e.g. from a password manager)
+        #[arg(long, conflicts_with = "from_gh")]
+        with_token: bool,
+        /// Reuse the token of the GitHub CLI ('gh auth token')
+        #[arg(long)]
+        from_gh: bool,
+        /// Deprecated: the token ends up in shell history
+        #[arg(hide = true, conflicts_with_all = ["with_token", "from_gh"])]
+        token: Option<String>,
     },
     /// Remove stored GitHub token
     Logout,
@@ -225,10 +240,81 @@ pub fn gh_login(token: &str) -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
+/// Where `auth gh login` takes the token from.
+#[derive(Debug, PartialEq)]
+pub enum TokenSource {
+    Argument(String),
+    Stdin,
+    Prompt,
+    GhCli,
+}
+
+/// Picks the token source from the flags and whether stdin is a terminal.
+pub fn token_source(
+    arg: Option<String>,
+    with_token: bool,
+    from_gh: bool,
+    stdin_is_tty: bool,
+) -> TokenSource {
+    match (arg, with_token, from_gh) {
+        (Some(t), _, _) => TokenSource::Argument(t),
+        (_, _, true) => TokenSource::GhCli,
+        (_, true, _) => TokenSource::Stdin,
+        _ if stdin_is_tty => TokenSource::Prompt,
+        _ => TokenSource::Stdin,
+    }
+}
+
+/// `diegops auth gh login`: gets the token without putting it on the command line.
+pub fn gh_login_cmd(
+    arg: Option<String>,
+    with_token: bool,
+    from_gh: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use std::io::{IsTerminal, Read};
+    let src = token_source(arg, with_token, from_gh, std::io::stdin().is_terminal());
+    let token = match src {
+        TokenSource::Argument(t) => {
+            eprintln!(
+                "warning: passing the token as an argument leaves it in your shell history; \
+                 run 'diegops auth gh login' (hidden prompt) or use --with-token"
+            );
+            t
+        }
+        TokenSource::Stdin => {
+            let mut s = String::new();
+            std::io::stdin().read_to_string(&mut s)?;
+            if s.trim().is_empty() {
+                return Err("no token received on stdin\n  hint: echo \"$TOKEN\" | diegops auth gh login --with-token".into());
+            }
+            s
+        }
+        TokenSource::GhCli => {
+            let out = std::process::Command::new("gh")
+                .args(["auth", "token"])
+                .output()
+                .map_err(|_| "GitHub CLI 'gh' not found\n  hint: install it with 'diegops tool install gh', then run 'gh auth login'")?;
+            if !out.status.success() {
+                return Err("'gh auth token' failed: gh is not logged in\n  hint: run 'gh auth login' first".into());
+            }
+            String::from_utf8(out.stdout)?
+        }
+        TokenSource::Prompt => {
+            eprintln!("Paste a GitHub personal access token (input is hidden).");
+            eprintln!("Create one: https://github.com/settings/personal-access-tokens/new");
+            rpassword::prompt_password("Token: ")?
+        }
+    };
+    let token = token.trim();
+    if token.is_empty() {
+        return Err("empty token\n  hint: see 'diegops explain pat'".into());
+    }
+    gh_login(token)
+}
+
 /// Shows the authenticated GitHub user.
 pub fn gh_whoami() -> Result<(), Box<dyn std::error::Error>> {
-    let token =
-        load_gh_token()?.ok_or("not authenticated. Run 'diegops auth gh login <PAT>' first")?;
+    let token = load_gh_token()?.ok_or("not authenticated. Run 'diegops auth gh login' first")?;
 
     let ua = format!("diegops/{}", env!("CARGO_PKG_VERSION"));
     let response = ureq::get("https://api.github.com/user")
@@ -253,9 +339,10 @@ pub fn gh_whoami() -> Result<(), Box<dyn std::error::Error>> {
             println!("Token scopes: {scopes}");
             Ok(())
         }
-        Err(ureq::Error::StatusCode(401 | 403)) => {
-            Err("stored GitHub token is no longer valid. Run 'diegops auth gh login <PAT>' to update it".into())
-        }
+        Err(ureq::Error::StatusCode(401 | 403)) => Err(
+            "stored GitHub token is no longer valid. Run 'diegops auth gh login' to update it"
+                .into(),
+        ),
         Err(e) if !matches!(e, ureq::Error::StatusCode(_)) => {
             Err("could not reach GitHub API. Check your connection".into())
         }
@@ -400,5 +487,22 @@ mod tests {
         let ts = format_rfc3339_now();
         assert!(ts.contains('T'), "got: {ts}");
         assert!(ts.ends_with('Z'), "got: {ts}");
+    }
+}
+
+#[cfg(test)]
+mod token_source_tests {
+    use super::{token_source, TokenSource::*};
+
+    #[test]
+    fn picks_source() {
+        assert_eq!(
+            token_source(Some("t".into()), false, false, true),
+            Argument("t".into())
+        );
+        assert_eq!(token_source(None, false, true, true), GhCli);
+        assert_eq!(token_source(None, true, false, true), Stdin);
+        assert_eq!(token_source(None, false, false, true), Prompt);
+        assert_eq!(token_source(None, false, false, false), Stdin);
     }
 }
