@@ -79,7 +79,7 @@ pub struct Registry {
 impl Registry {
     /// Parses YAML text.
     pub fn parse(text: &str) -> Result<Self, BoxError> {
-        serde_yaml::from_str(text).map_err(|e| format!("invalid agents config: {e}").into())
+        serde_norway::from_str(text).map_err(|e| format!("invalid agents config: {e}").into())
     }
 
     /// Loads from `--config` > `$DIEGOPS_AGENTS_CONFIG` > `~/.diegops/agents.yaml`.

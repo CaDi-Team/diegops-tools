@@ -149,7 +149,7 @@ pub fn restart() -> Result<(), Box<dyn std::error::Error>> {
 fn load_gpg_config() -> Result<GpgConfig, Box<dyn std::error::Error>> {
     let path = diegops_dir()?.join(GPG_CONFIG_FILENAME);
     let content = super::common::read_config_file(&path)?;
-    let config: GpgConfig = serde_yaml::from_str(&content)?;
+    let config: GpgConfig = serde_norway::from_str(&content)?;
     Ok(config)
 }
 

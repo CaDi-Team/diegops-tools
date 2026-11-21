@@ -313,7 +313,7 @@ fn load_config(path: Option<&Path>) -> Result<ReposConfig, Box<dyn std::error::E
     let config_path =
         super::common::resolve_config_path(path, "DIEGOPS_REPOS_CONFIG", "repos.yaml")?;
     let content = super::common::read_config_file(&config_path)?;
-    serde_yaml::from_str::<ReposConfig>(&content)
+    serde_norway::from_str::<ReposConfig>(&content)
         .map_err(|e| format!("invalid repos config {}: {e}", config_path.display()).into())
 }
 
