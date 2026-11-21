@@ -1017,3 +1017,49 @@ impl Drop for TmpHome {
         let _ = std::fs::remove_dir_all(&self.0);
     }
 }
+
+// --- #44: shell init --dry-run ------------------------------------------------
+
+#[test]
+fn shell_init_dry_run_prints_plan_and_touches_nothing() {
+    let tmp = TmpHome::new();
+    std::fs::write(tmp.path().join(".bashrc"), "# mine\n").unwrap();
+    let output = diegops()
+        .args(["shell", "init", "--dry-run"])
+        .env("HOME", tmp.path())
+        .env("SHELL", "/bin/bash")
+        .output()
+        .expect("run");
+    assert!(output.status.success(), "{output:?}");
+    let out = String::from_utf8_lossy(&output.stdout);
+    for s in [
+        "dry run",
+        "chsh -s",
+        "git clone --depth=1 https://github.com/ohmyzsh/ohmyzsh.git",
+        "zsh-autosuggestions",
+        ".diegops/shell/diegops.zsh",
+        "append source line to",
+        ".zshrc",
+        ".diegops/shell/diegops.bash",
+    ] {
+        assert!(out.contains(s), "missing {s:?} in:\n{out}");
+    }
+    let entries: Vec<_> = std::fs::read_dir(tmp.path()).unwrap().collect();
+    assert_eq!(entries.len(), 1, "dry run created files");
+    assert_eq!(
+        std::fs::read_to_string(tmp.path().join(".bashrc")).unwrap(),
+        "# mine\n"
+    );
+}
+
+#[test]
+fn shell_init_help_lists_what_it_touches() {
+    let output = diegops()
+        .args(["shell", "init", "--help"])
+        .output()
+        .unwrap();
+    let out = String::from_utf8_lossy(&output.stdout);
+    for s in ["--dry-run", "--yes", "~/.zshrc", "~/.oh-my-zsh", "sudo"] {
+        assert!(out.contains(s), "missing {s}: {out}");
+    }
+}

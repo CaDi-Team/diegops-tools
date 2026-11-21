@@ -334,8 +334,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
         },
         Some(Commands::Shell { cmd }) => match cmd {
-            ShellCommand::Init => {
-                commands::shell::init()?;
+            ShellCommand::Init { dry_run, yes } => {
+                commands::shell::init(dry_run, yes)?;
             }
         },
         Some(Commands::Repo { cmd }) => {
