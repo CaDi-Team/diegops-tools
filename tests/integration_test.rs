@@ -755,5 +755,8 @@ fn kv_backend_says_when_config_is_missing() {
         .output()
         .expect("run");
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("(not found, using defaults)"), "got: {stdout}");
+    assert!(
+        stdout.contains("(not found, using defaults)"),
+        "got: {stdout}"
+    );
 }
