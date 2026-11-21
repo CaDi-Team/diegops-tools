@@ -919,3 +919,101 @@ fn credential_errors_point_to_explain() {
         "{stderr}"
     );
 }
+
+// --- #43: auth gh login without the token on the command line ---------------
+
+#[test]
+fn gh_login_reads_token_from_stdin_and_rejects_empty() {
+    use std::io::Write;
+    let tmp = TmpHome::new();
+    let mut child = diegops()
+        .args(["auth", "gh", "login", "--with-token"])
+        .env("HOME", tmp.path())
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("spawn");
+    child.stdin.take().unwrap().write_all(b"  \n").unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("no token received on stdin"), "{stderr}");
+}
+
+#[test]
+fn gh_login_positional_token_is_deprecated() {
+    let tmp = TmpHome::new();
+    let output = diegops()
+        .args(["auth", "gh", "login", " "])
+        .env("HOME", tmp.path())
+        .output()
+        .expect("run");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("warning: passing the token as an argument"),
+        "{stderr}"
+    );
+    assert!(!tmp.path().join(".diegops/tokens/gh.json").exists());
+}
+
+#[test]
+fn gh_login_help_explains_pat() {
+    let output = diegops()
+        .args(["auth", "gh", "login", "--help"])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("--with-token"), "{stdout}");
+    assert!(stdout.contains("--from-gh"), "{stdout}");
+    assert!(
+        stdout.contains("github.com/settings/personal-access-tokens/new"),
+        "{stdout}"
+    );
+    assert!(
+        !stdout.contains("<TOKEN>"),
+        "positional should be hidden: {stdout}"
+    );
+}
+
+#[test]
+fn hints_do_not_suggest_token_as_argument() {
+    for f in [
+        "src/commands/auth.rs",
+        "src/commands/sync.rs",
+        "src/commands/all.rs",
+        "src/examples.rs",
+        "src/main.rs",
+        "README.md",
+    ] {
+        let s = std::fs::read_to_string(f).unwrap();
+        assert!(
+            !s.contains("gh login <PAT>") && !s.contains("gh login <TOKEN>"),
+            "{f}"
+        );
+    }
+}
+
+/// Throwaway HOME for tests that must not touch the real one.
+struct TmpHome(std::path::PathBuf);
+impl TmpHome {
+    fn new() -> Self {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static N: AtomicU32 = AtomicU32::new(0);
+        let p = std::env::temp_dir().join(format!(
+            "diegops-test-{}-{}",
+            std::process::id(),
+            N.fetch_add(1, Ordering::SeqCst)
+        ));
+        std::fs::create_dir_all(&p).unwrap();
+        TmpHome(p)
+    }
+    fn path(&self) -> &std::path::Path {
+        &self.0
+    }
+}
+impl Drop for TmpHome {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}

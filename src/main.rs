@@ -170,7 +170,7 @@ enum Commands {
         Storage: ~/.diegops/tokens/ (0600 permissions on Unix)\n\
         Resolution: stored file > $GITHUB_TOKEN env var > unauthenticated\n\n\
         Quick start:\n  \
-        diegops auth gh login <PAT>   # store GitHub token\n  \
+        diegops auth gh login         # store GitHub token\n  \
         diegops auth status           # check all providers")]
     Auth {
         #[command(subcommand)]
@@ -423,8 +423,12 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
         Some(Commands::Auth { cmd }) => match cmd {
             AuthCommand::Gh { cmd: gh_cmd } => match gh_cmd {
-                GhCommand::Login { token } => {
-                    commands::auth::gh_login(&token)?;
+                GhCommand::Login {
+                    token,
+                    with_token,
+                    from_gh,
+                } => {
+                    commands::auth::gh_login_cmd(token, with_token, from_gh)?;
                 }
                 GhCommand::Logout => {
                     commands::auth::gh_logout()?;

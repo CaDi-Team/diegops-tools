@@ -397,7 +397,7 @@ sequenceDiagram
 
 ```sh
 # 1. Install diegops (above), then recreate config.toml and the client secret (Steps 3 and 4)
-diegops auth gh login <PAT>   # GitHub token, for sync and repo
+diegops auth gh login         # GitHub token (hidden prompt), for sync and repo
 diegops sync pull             # brings back ~/.diegops/secrets.yaml and the other configs
 diegops secrets pull          # restores the files
 # or all at once:
@@ -596,7 +596,7 @@ Errors go to stderr as `error: <what failed>`, with optional `  hint: <what to d
 | `diegops agents hermes secrets push` | Move every profile's `.env` into the secrets backend |
 | `diegops agents status/init/install-timer` | All agents at a glance / sample registry / optional daily timer |
 | `diegops sync push/pull/status` | Back up `~/.diegops/` to a private GitHub repo |
-| `diegops auth gh login <PAT>/logout/whoami`, `diegops auth status` | GitHub token |
+| `diegops auth gh login/logout/whoami`, `diegops auth status` | GitHub token |
 | `diegops tool list/install/update/remove`, `diegops <tool> ...` | Managed DevOps CLIs |
 | `diegops ktool update`, `diegops ktool <args>` | Karluiz tools |
 | `diegops shell init` | zsh, oh-my-zsh and the managed shell config |

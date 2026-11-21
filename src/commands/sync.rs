@@ -48,7 +48,7 @@ fn user_agent() -> String {
 /// Loads the stored GitHub token, returning a user-friendly error if missing.
 fn require_token() -> Result<String, Box<dyn std::error::Error>> {
     super::auth::load_gh_token()?
-        .ok_or_else(|| "not authenticated. Run 'diegops auth gh login <PAT>' first".into())
+        .ok_or_else(|| "not authenticated. Run 'diegops auth gh login' first".into())
 }
 
 /// Fetches the authenticated GitHub username.
@@ -68,7 +68,7 @@ fn get_username(token: &str) -> Result<String, Box<dyn std::error::Error>> {
                 .ok_or_else(|| "GitHub API response missing 'login'".into())
         }
         Err(ureq::Error::StatusCode(401 | 403)) => {
-            Err("GitHub token is invalid or expired. Run 'diegops auth gh login <PAT>'".into())
+            Err("GitHub token is invalid or expired. Run 'diegops auth gh login'".into())
         }
         Err(e) => Err(format!("GitHub API error: {e}").into()),
     }
@@ -129,7 +129,7 @@ fn repo_exists(token: &str, owner: &str, repo: &str) -> Result<bool, Box<dyn std
         Ok(_) => Ok(true),
         Err(ureq::Error::StatusCode(404)) => Ok(false),
         Err(ureq::Error::StatusCode(401 | 403)) => {
-            Err("GitHub token is invalid or expired. Run 'diegops auth gh login <PAT>'".into())
+            Err("GitHub token is invalid or expired. Run 'diegops auth gh login'".into())
         }
         Err(e) => Err(format!("GitHub API error: {e}").into()),
     }
@@ -267,7 +267,7 @@ fn get_cloud_file(
         }
         Err(ureq::Error::StatusCode(404)) => Ok(None),
         Err(ureq::Error::StatusCode(401 | 403)) => {
-            Err("GitHub token is invalid or expired. Run 'diegops auth gh login <PAT>'".into())
+            Err("GitHub token is invalid or expired. Run 'diegops auth gh login'".into())
         }
         Err(e) => Err(format!("GitHub API error fetching {path}: {e}").into()),
     }
@@ -353,7 +353,7 @@ fn list_cloud_files(
         // Empty repo returns 404 for contents/
         Err(ureq::Error::StatusCode(404)) => Ok(Vec::new()),
         Err(ureq::Error::StatusCode(401 | 403)) => {
-            Err("GitHub token is invalid or expired. Run 'diegops auth gh login <PAT>'".into())
+            Err("GitHub token is invalid or expired. Run 'diegops auth gh login'".into())
         }
         Err(e) => Err(format!("GitHub API error listing {dir_path}: {e}").into()),
     }
