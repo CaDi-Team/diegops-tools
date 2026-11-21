@@ -6,6 +6,7 @@ use clap::Command;
 /// `(command path, examples)`; the path is space-separated under `diegops`.
 pub const EXAMPLES: &[(&str, &str)] = &[
     ("version", "diegops version"),
+    ("completion", "diegops completion zsh > ~/.zfunc/_diegops     # or: source <(diegops completion zsh)\ndiegops completion bash > ~/.local/share/bash-completion/completions/diegops\ndiegops completion fish > ~/.config/fish/completions/diegops.fish\ndiegops man | man -l -                              # read the man page"),
     ("update", "diegops update              # replace this binary with the latest release\nsudo diegops update         # if installed in a system path"),
     ("cadi", "diegops cadi"),
     ("bootstrap", "diegops bootstrap           # new machine: auth check, pull config, clone repos, secrets"),

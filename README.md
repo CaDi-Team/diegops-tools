@@ -577,6 +577,7 @@ Errors go to stderr as `error: <what failed>`, with optional `  hint: <what to d
 | Command | What it does |
 |---|---|
 | `diegops help [command…]` | Grouped command list, or help for one command (`diegops help repo apply`). Typos get a "did you mean" hint. |
+| `diegops completion <shell>` / `diegops man` | Shell completion script (bash, zsh, fish, powershell; `shell init` loads it for zsh and bash) / man page (`diegops man \| man -l -`) |
 | `diegops version` / `diegops update` | Show the version / self-update |
 | `diegops bootstrap` | Full new-machine setup (same as `all pull`) |
 | `diegops all pull` | sync pull → SSH keys → repo apply → vault apply → secrets pull → agent restore (missing profiles) → shell init |

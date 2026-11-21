@@ -828,3 +828,43 @@ fn version_flag_and_subcommand_match() {
         String::from_utf8_lossy(&b.stdout)
     );
 }
+
+// --- #41: completions and man page -----------------------------------------
+
+#[test]
+fn completion_scripts_for_each_shell() {
+    for (shell, marker) in [
+        ("bash", "_diegops()"),
+        ("zsh", "#compdef diegops"),
+        ("fish", "complete -c diegops"),
+        ("powershell", "Register-ArgumentCompleter"),
+    ] {
+        let output = diegops().args(["completion", shell]).output().expect("run");
+        assert!(output.status.success(), "{shell}: {output:?}");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains(marker), "{shell} missing {marker}");
+        assert!(stdout.contains("bootstrap"), "{shell} lacks subcommands");
+    }
+}
+
+#[test]
+fn completion_rejects_unknown_shell() {
+    let output = diegops()
+        .args(["completion", "tcsh"])
+        .output()
+        .expect("run");
+    assert_eq!(output.status.code(), Some(2));
+}
+
+#[test]
+fn man_page_is_roff() {
+    let output = diegops().arg("man").output().expect("run");
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains(".TH diegops"),
+        "got: {}",
+        &stdout[..stdout.len().min(200)]
+    );
+    assert!(stdout.contains("bootstrap"));
+}

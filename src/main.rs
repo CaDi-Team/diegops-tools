@@ -18,7 +18,7 @@ use commands::vault::VaultCommand;
 #[command(
     name = "diegops",
     version = concat!("v", env!("CARGO_PKG_VERSION")),
-    about = "diegops — personal productivity CLI for humans and containers",
+    about = "personal productivity CLI for humans and containers",
     long_about = "diegops — personal productivity CLI for humans and containers\n\n\
         Workspace management, secret injection, cloud config sync,\n\
         managed DevOps toolbox, and developer workstation setup\n\
@@ -43,6 +43,17 @@ pub(crate) struct Cli {
 enum Commands {
     /// Print version information
     Version,
+    /// Print a shell completion script (bash, zsh, fish, powershell)
+    #[command(long_about = "Print a shell completion script to stdout.\n\n\
+        'diegops shell init' already loads it for zsh and bash. To load it by hand,\n\
+        add the matching line to your shell rc file.")]
+    Completion {
+        /// Shell to generate for
+        shell: clap_complete::Shell,
+    },
+    /// Print the man page (roff) to stdout
+    #[command(hide = true)]
+    Man,
     /// Show help for diegops or for a command (e.g. diegops help repo apply)
     Help {
         /// Command path, e.g. `repo apply`
@@ -265,6 +276,12 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let cmd = cmd.clone().help_template(help::template(&cmd));
     let cli = Cli::from_arg_matches(&cmd.get_matches()).unwrap_or_else(|e| e.exit());
     match cli.command {
+        Some(Commands::Completion { shell }) => {
+            clap_complete::generate(shell, &mut cli_command(), "diegops", &mut std::io::stdout());
+        }
+        Some(Commands::Man) => {
+            clap_mangen::Man::new(cli_command()).render(&mut std::io::stdout())?;
+        }
         Some(Commands::Version) => {
             println!("diegops v{}", env!("CARGO_PKG_VERSION"));
         }

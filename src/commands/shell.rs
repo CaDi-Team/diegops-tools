@@ -45,6 +45,9 @@ export KUBECONFIG=$(find ~/.kube -maxdepth 1 -type f \\( -name \"*.yaml\" -o -na
 alias code='code-insiders'
 alias cc='claude --dangerously-skip-permissions'
 alias k='kubectl'
+
+# -- Completions ----------------------------------------------------------------
+command -v diegops >/dev/null && source <(diegops completion zsh)
 ";
 
 const BASH_CONFIG: &str = "\
@@ -62,6 +65,9 @@ export KUBECONFIG=$(find ~/.kube -maxdepth 1 -type f \\( -name \"*.yaml\" -o -na
 alias code='code-insiders'
 alias cc='claude --dangerously-skip-permissions'
 alias k='kubectl'
+
+# -- Completions ----------------------------------------------------------------
+command -v diegops >/dev/null && source <(diegops completion bash)
 ";
 
 const ZSH_SOURCE_LINE: &str =
@@ -359,6 +365,12 @@ fn run_cmd(program: &str, args: &[&str]) -> Result<(), Box<dyn std::error::Error
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn managed_configs_load_completions() {
+        assert!(super::ZSH_CONFIG.contains("diegops completion zsh"));
+        assert!(super::BASH_CONFIG.contains("diegops completion bash"));
+    }
+
     use super::*;
 
     #[test]

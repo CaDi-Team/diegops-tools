@@ -11,7 +11,10 @@ pub const GROUPS: &[(&str, &[&str])] = &[
     ("Workspace", &["repo", "sync", "devtools"]),
     ("Tools", &["tool", "ktool"]),
     ("AI agents", &["agents"]),
-    ("About", &["help", "version", "update", "cadi"]),
+    (
+        "About",
+        &["help", "completion", "version", "update", "cadi"],
+    ),
 ];
 
 /// Renders the grouped command list used in the top-level help template.
