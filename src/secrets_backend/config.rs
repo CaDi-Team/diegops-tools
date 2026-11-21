@@ -191,7 +191,7 @@ pub fn resolve_vault(
     let address = non_empty(env("VAULT_ADDR"))
         .or_else(|| v.address.clone())
         .ok_or(
-            "no Vault address configured: set [vault] address in the diegops config or VAULT_ADDR",
+            "no Vault address configured\n  hint: set address under [vault] in the config, or export VAULT_ADDR",
         )?;
     let namespace = non_empty(env("VAULT_NAMESPACE")).or_else(|| v.namespace.clone());
     let ca_cert = non_empty(env("VAULT_CACERT"))
@@ -240,8 +240,11 @@ pub fn resolve_infisical(
         let client_id = non_empty(env("INFISICAL_UNIVERSAL_AUTH_CLIENT_ID"))
             .or_else(|| c.client_id.clone())
             .ok_or(
-                "no Infisical credentials: set [infisical] client_id (machine identity) or \
-                 INFISICAL_UNIVERSAL_AUTH_CLIENT_ID, or INFISICAL_TOKEN",
+                "no Infisical credentials found\n  \
+                 hint: add client_id and client_secret_file under [infisical] in the config \
+                 (Infisical > Access Control > Machine Identities > Universal Auth)\n  \
+                 hint: or export INFISICAL_UNIVERSAL_AUTH_CLIENT_ID and \
+                 INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET, or INFISICAL_TOKEN",
             )?;
         let client_secret = client_secret(c, env)?;
         InfisicalAuth::UniversalAuth {
@@ -281,7 +284,7 @@ fn client_secret(
             .trim()
             .to_string();
         if s.is_empty() {
-            return Err("client_secret_command printed nothing".into());
+            return Err("[infisical] client_secret_command printed nothing to stdout".into());
         }
         return Ok(s);
     }
@@ -293,11 +296,10 @@ fn client_secret(
             .map_err(|e| format!("could not read {}: {e}", path.display()))?;
         return Ok(s.trim().to_string());
     }
-    Err(
-        "no Infisical client secret: set INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET, \
-         [infisical] client_secret_command or client_secret_file"
-            .into(),
-    )
+    Err("no Infisical client secret found\n  \
+         hint: add client_secret_file (a file with mode 0600) or client_secret_command \
+         under [infisical] in the config, or export INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET"
+        .into())
 }
 
 /// Refuses secret files readable by group/others.

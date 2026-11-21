@@ -725,3 +725,38 @@ fn long_help_documents_exit_codes() {
     assert!(stdout.contains("EXIT CODES:"), "got: {stdout}");
     assert!(stdout.contains("2  usage error"), "got: {stdout}");
 }
+
+// --- #38: actionable errors -----------------------------------------------
+
+#[test]
+fn missing_repos_config_suggests_init_command() {
+    let home = std::env::temp_dir().join(format!("diegops-it-38-{}", std::process::id()));
+    std::fs::create_dir_all(&home).unwrap();
+    let output = diegops()
+        .args(["repo", "list"])
+        .env("HOME", &home)
+        .env_remove("DIEGOPS_REPOS_CONFIG")
+        .output()
+        .expect("run");
+    std::fs::remove_dir_all(&home).ok();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("hint: run 'diegops repo init' to create a sample"),
+        "got: {stderr}"
+    );
+}
+
+#[test]
+fn kv_backend_says_when_config_is_missing() {
+    let output = diegops()
+        .args(["kv", "backend"])
+        .env("DIEGOPS_CONFIG", "/nonexistent/diegops/config.toml")
+        .env_remove("DIEGOPS_BACKEND")
+        .output()
+        .expect("run");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("(not found, using defaults)"),
+        "got: {stdout}"
+    );
+}

@@ -137,6 +137,25 @@ pub fn print_summary(results: &[StepResult]) -> usize {
     failures
 }
 
+/// Error naming the failed steps; every step is idempotent, so rerunning is safe.
+pub fn steps_failed_error(
+    results: &[StepResult],
+    noun: &str,
+    rerun: &str,
+) -> Box<dyn std::error::Error> {
+    let failed: Vec<String> = results
+        .iter()
+        .filter(|s| !s.ok)
+        .map(|s| s.label.to_string())
+        .collect();
+    super::common::failed_items_error(
+        &format!("{noun} step"),
+        results.len(),
+        &failed,
+        &format!("fix the FAIL lines above, then rerun '{rerun}' (safe to repeat)"),
+    )
+}
+
 /// Prints the summary and converts a nonzero failure count into an error.
 ///
 /// `noun` names the run in the final message, e.g. `"pull"` or `"push"`.
@@ -145,7 +164,11 @@ pub fn finish(results: &[StepResult], noun: &str) -> Result<(), Box<dyn std::err
     if failures == 0 {
         Ok(())
     } else {
-        Err(format!("{failures} {noun} step(s) failed").into())
+        Err(steps_failed_error(
+            results,
+            noun,
+            &format!("diegops all {noun}"),
+        ))
     }
 }
 
@@ -287,7 +310,10 @@ mod tests {
             detail: "bad".to_string(),
         }];
         let err = finish(&results, "push").unwrap_err();
-        assert!(err.to_string().contains("1 push step(s) failed"));
+        assert_eq!(
+            err.to_string(),
+            "1 of 1 push step(s) failed: a\n  hint: fix the FAIL lines above, then rerun 'diegops all push' (safe to repeat)"
+        );
     }
 
     #[test]
