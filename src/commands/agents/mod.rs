@@ -45,7 +45,7 @@ pub enum HermesCommand {
     },
     /// Restore profiles from the backup repo and inject .env from the secrets backend
     Restore {
-        /// Only this profile
+        /// Only this profile (default: all)
         #[arg(long)]
         profile: Option<String>,
         /// Restore under DIR/<profile> instead of the Hermes home (dry run)
@@ -77,11 +77,13 @@ pub enum HermesCommand {
 pub enum MemoryCommand {
     /// Show what changed in memories since the last push
     Review {
+        /// Only this profile (default: all)
         #[arg(long)]
         profile: Option<String>,
     },
     /// Push memories after review
     Push {
+        /// Only this profile (default: all)
         #[arg(long)]
         profile: Option<String>,
     },
@@ -92,6 +94,7 @@ pub enum MemoryCommand {
 pub enum SecretsCommand {
     /// Upload each profile's .env to <secrets_path>/<profile> (values never printed)
     Push {
+        /// Only this profile (default: all)
         #[arg(long)]
         profile: Option<String>,
     },

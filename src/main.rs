@@ -1,4 +1,5 @@
 mod commands;
+mod examples;
 mod help;
 mod secrets_backend;
 
@@ -104,7 +105,7 @@ enum Commands {
         long_about = "Manage Vault secrets — pull secrets and write .env files.\n\n\
         Config: ~/.diegops/repo-vault.yaml (override with --config or $DIEGOPS_VAULT_CONFIG)\n\
         Requires: a configured secrets backend (Infisical default, or Vault/OpenBao)\n\
-        in ~/.config/diegops/config.toml — see docs/secrets-backends.md.\n\n\
+        in ~/.config/diegops/config.toml — see https://github.com/CaDi-Team/diegops-tools/blob/develop/docs/secrets-backends.md.\n\n\
         Quick start:\n  \
         diegops vault init    # create sample config\n  \
         diegops vault apply   # pull secrets and write .env files"
@@ -117,7 +118,7 @@ enum Commands {
     #[command(long_about = "Read and write secrets in the configured backend.\n\n\
         Backend: --backend > $DIEGOPS_SECRETS_BACKEND > `backend` in\n\
         ~/.config/diegops/config.toml > infisical (Infisical Cloud).\n\
-        Paths are <mount>/<path> as in Vault KV v2. See docs/secrets-backends.md.")]
+        Paths are <mount>/<path> as in Vault KV v2. See https://github.com/CaDi-Team/diegops-tools/blob/develop/docs/secrets-backends.md.")]
     Kv {
         /// Backend: infisical | vault (alias openbao)
         #[arg(long, global = true)]
@@ -254,8 +255,13 @@ fn render_error(msg: &str) -> String {
     format!("error: {}", msg.trim_end())
 }
 
+/// The full command tree with examples and the ENVIRONMENT section attached.
+fn cli_command() -> clap::Command {
+    examples::apply(Cli::command())
+}
+
 fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let cmd = Cli::command();
+    let cmd = cli_command();
     let cmd = cmd.clone().help_template(help::template(&cmd));
     let cli = Cli::from_arg_matches(&cmd.get_matches()).unwrap_or_else(|e| e.exit());
     match cli.command {
@@ -263,7 +269,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             println!("diegops v{}", env!("CARGO_PKG_VERSION"));
         }
         Some(Commands::Help { command }) if !command.is_empty() => {
-            let root = Cli::command();
+            let root = cli_command();
             if let Err((bad, names, help_cmd)) = help::check_path(&root, &command) {
                 eprintln!("{}", help::unknown_command(&bad, &names, &help_cmd));
                 std::process::exit(2);
@@ -276,7 +282,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Some(Commands::Help { .. }) | None => {
-            let root = Cli::command();
+            let root = cli_command();
             root.clone()
                 .help_template(help::template(&root))
                 .print_long_help()?;
@@ -460,7 +466,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 if commands::tool::is_known_tool(name) {
                     commands::tool::passthrough(name, &args[1..])?;
                 } else {
-                    let mut names = help::visible_names(&Cli::command());
+                    let mut names = help::visible_names(&cli_command());
                     names.extend(commands::tool::tool_names());
                     eprintln!("{}", help::unknown_command(name, &names, "diegops --help"));
                     std::process::exit(2);
