@@ -208,7 +208,7 @@ fn run_steps(steps: &[Step]) -> Vec<StepResult> {
 /// Verifies GitHub authentication and returns the username.
 fn check_github() -> Result<String, Box<dyn std::error::Error>> {
     let token = super::auth::load_gh_token()?
-        .ok_or("not authenticated. Run 'diegops auth gh login <PAT>' first")?;
+        .ok_or("not authenticated. Run 'diegops auth gh login' first")?;
 
     let ua = format!("diegops/{}", env!("CARGO_PKG_VERSION"));
     let response = ureq::get("https://api.github.com/user")
@@ -226,7 +226,7 @@ fn check_github() -> Result<String, Box<dyn std::error::Error>> {
             Ok(login.to_string())
         }
         Err(ureq::Error::StatusCode(401 | 403)) => {
-            Err("stored GitHub token is no longer valid. Run 'diegops auth gh login <PAT>'".into())
+            Err("stored GitHub token is no longer valid. Run 'diegops auth gh login'".into())
         }
         Err(ureq::Error::StatusCode(code)) => {
             Err(format!("GitHub API returned unexpected status {code}").into())

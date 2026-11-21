@@ -30,6 +30,7 @@ webpki-root-certs = "1.0"
 regex = "1"
 clap_complete = "4"
 clap_mangen = "0.3"
+rpassword = "7"
 
 # Unix targets: extract .tar.gz release archives
 [target.'cfg(unix)'.dependencies]
