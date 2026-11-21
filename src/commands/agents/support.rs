@@ -244,6 +244,7 @@ pub struct AgentRun {
 
 /// All agents' last-run records.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct RunState {
     /// Keyed by agent kind name.
     pub agents: BTreeMap<String, AgentRun>,
@@ -277,10 +278,30 @@ impl RunState {
         Ok(base.join("diegops").join("agents.json"))
     }
 
+    /// Parses saved state; a corrupt file yields empty state plus a warning.
+    pub fn parse(text: &str, path: &Path) -> (Self, Option<String>) {
+        match serde_json::from_str(text) {
+            Ok(s) => (s, None),
+            Err(e) => (
+                Self::default(),
+                Some(format!(
+                    "agents state file {} is corrupt ({e}); last-run info starts empty and will be rewritten on the next backup",
+                    path.display()
+                )),
+            ),
+        }
+    }
+
     /// Loads the state (empty when missing).
     pub fn load() -> Result<Self, BoxError> {
         match std::fs::read_to_string(Self::path()?) {
-            Ok(t) => Ok(serde_json::from_str(&t).unwrap_or_default()),
+            Ok(t) => {
+                let (s, warn) = Self::parse(&t, &Self::path()?);
+                if let Some(w) = warn {
+                    eprintln!("warning: {w}");
+                }
+                Ok(s)
+            }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
             Err(e) => Err(e.into()),
         }

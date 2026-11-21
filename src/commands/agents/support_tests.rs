@@ -84,3 +84,13 @@ fn run_state_round_trips_and_reports_age() {
     assert_eq!(human_age(1_000, 1_000 + 3 * 3600 + 120), "3h2m");
     assert_eq!(human_age(0, 2 * 86_400 + 5), "2d0h");
 }
+
+#[test]
+fn corrupt_run_state_warns_instead_of_silently_resetting() {
+    let (s, warn) = RunState::parse("{not json", std::path::Path::new("/x/agents.json"));
+    assert!(s.agents.is_empty());
+    let w = warn.expect("warning");
+    assert!(w.contains("/x/agents.json") && w.contains("corrupt"), "{w}");
+    let (_, warn) = RunState::parse("{}", std::path::Path::new("/x"));
+    assert!(warn.is_none());
+}
