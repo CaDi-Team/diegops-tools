@@ -162,7 +162,7 @@ fn ensure_default_shell() {
     let zsh_path = which("zsh").unwrap_or_else(|| "/usr/bin/zsh".to_string());
     match run_cmd("chsh", &["-s", &zsh_path]) {
         Ok(()) => eprintln!("OK (set to zsh)"),
-        Err(e) => eprintln!("WARN: could not set default shell: {e}"),
+        Err(e) => eprintln!("warning: could not set default shell: {e}"),
     }
 }
 
@@ -266,19 +266,19 @@ fn setup_bash(home: &Path) {
 
     let shell_dir = home.join(".diegops").join("shell");
     if let Err(e) = fs::create_dir_all(&shell_dir) {
-        eprintln!("WARN: could not create shell dir: {e}");
+        eprintln!("warning: could not create shell dir: {e}");
         return;
     }
 
     let bash_path = shell_dir.join("diegops.bash");
     if let Err(e) = fs::write(&bash_path, BASH_CONFIG) {
-        eprintln!("WARN: could not write diegops.bash: {e}");
+        eprintln!("warning: could not write diegops.bash: {e}");
         return;
     }
 
     match inject_source_line(&bashrc, BASH_SOURCE_MARKER, BASH_SOURCE_LINE) {
         Ok(()) => {}
-        Err(e) => eprintln!("WARN: could not inject bash source line: {e}"),
+        Err(e) => eprintln!("warning: could not inject bash source line: {e}"),
     }
 }
 

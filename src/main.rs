@@ -25,7 +25,11 @@ use commands::vault::VaultCommand;
         Run managed tools directly: diegops <tool> <args>\n  \
         Example: diegops gh pr list, diegops jq '.name' file.json\n  \
         Available: gh, vault, bao, terraform, helm, k9s, kubectl, jq, yq, trivy, trip\n\n\
-        Run 'diegops <command> --help' for details on any command.",
+        Run 'diegops <command> --help' for details on any command.\n\n\
+        EXIT CODES:\n  \
+        0  success\n  \
+        1  the command failed (message starts with 'error:')\n  \
+        2  usage error: unknown command, bad flag or argument",
     disable_help_subcommand = true
 )]
 struct Cli {
@@ -231,8 +235,21 @@ fn reset_sigpipe() {
 #[cfg(not(unix))]
 fn reset_sigpipe() {}
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() {
     reset_sigpipe();
+    if let Err(e) = run() {
+        eprintln!("{}", render_error(&e.to_string()));
+        std::process::exit(1);
+    }
+}
+
+/// Formats an error for humans: `error: <first line>` followed by any
+/// continuation lines (hints) exactly as written, never Debug-quoted.
+fn render_error(msg: &str) -> String {
+    format!("error: {}", msg.trim_end())
+}
+
+fn run() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
     match cli.command {
         Some(Commands::Version) => {
@@ -420,9 +437,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if commands::tool::is_known_tool(name) {
                     commands::tool::passthrough(name, &args[1..])?;
                 } else {
-                    eprintln!("Unknown command: {name}");
-                    eprintln!("Run 'diegops help' for available commands.");
-                    std::process::exit(1);
+                    eprintln!("error: unknown command '{name}'");
+                    eprintln!("  hint: run 'diegops --help' to see available commands");
+                    std::process::exit(2);
                 }
             }
         }
@@ -432,6 +449,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn render_error_prefixes_and_keeps_hint_lines() {
+        let out = super::render_error("config not found: x\n  hint: create it\n");
+        assert_eq!(out, "error: config not found: x\n  hint: create it");
+    }
+
     #[test]
     fn version_string_is_not_empty() {
         assert!(!env!("CARGO_PKG_VERSION").is_empty());
