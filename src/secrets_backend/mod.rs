@@ -33,6 +33,10 @@ pub trait SecretsBackend {
     fn validate_key(&self, _key: &str) -> Result<(), BoxError> {
         Ok(())
     }
+    /// Checks that the backend accepts our credentials (one cheap call).
+    fn ping(&self) -> Result<(), BoxError> {
+        Ok(())
+    }
     /// Identifier of the physical location `path` maps to (collision checks).
     fn location_id(&self, path: &str) -> Result<String, BoxError> {
         Ok(path.to_string())

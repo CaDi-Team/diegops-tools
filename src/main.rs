@@ -43,6 +43,23 @@ pub(crate) struct Cli {
 enum Commands {
     /// Print version information
     Version,
+    /// Check this machine's setup and show how to fix each problem
+    #[command(
+        long_about = "Check this machine's setup and show how to fix each problem.\n\n\
+        Checks: the diegops binary, config files, the secrets backend (config,\n\
+        credentials, client secret file permissions, a test call), the GitHub token\n\
+        and sync repo, and managed tools on PATH.\n\
+        ✓ ok   ! warning (optional or risky)   ✗ problem   - skipped\n\
+        Exits 1 if any ✗. Nothing is changed."
+    )]
+    Doctor {
+        /// Print the result as JSON
+        #[arg(long)]
+        json: bool,
+        /// Do not contact the backend or GitHub
+        #[arg(long)]
+        offline: bool,
+    },
     /// Explain a term in plain words (backend, infisical, pat, …)
     Explain {
         /// Term to explain; omit to list all terms
@@ -281,6 +298,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let cmd = cmd.clone().help_template(help::template(&cmd));
     let cli = Cli::from_arg_matches(&cmd.get_matches()).unwrap_or_else(|e| e.exit());
     match cli.command {
+        Some(Commands::Doctor { json, offline }) => {
+            commands::doctor::run(json, offline)?;
+        }
         Some(Commands::Explain { term }) => {
             let t = term.join(" ");
             commands::explain::run((!t.is_empty()).then_some(t.as_str()))?;

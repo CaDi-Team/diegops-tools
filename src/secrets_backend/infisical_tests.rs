@@ -431,3 +431,38 @@ fn writes_send_plain_json_content_type() {
     f.assert();
     w.assert();
 }
+
+#[test]
+fn ping_logs_in_with_universal_auth() {
+    let mut server = mockito::Server::new();
+    let ok = server
+        .mock("POST", "/api/v1/auth/universal-auth/login")
+        .with_body(r#"{"accessToken":"t"}"#)
+        .create();
+    let b = InfisicalBackend::new(settings(
+        &server.url(),
+        InfisicalAuth::UniversalAuth {
+            client_id: "c".into(),
+            client_secret: "s".into(),
+        },
+    ));
+    assert!(b.ping().is_ok());
+    ok.assert();
+}
+
+#[test]
+fn ping_fails_on_rejected_login() {
+    let mut server = mockito::Server::new();
+    let _m = server
+        .mock("POST", "/api/v1/auth/universal-auth/login")
+        .with_status(401)
+        .create();
+    let b = InfisicalBackend::new(settings(
+        &server.url(),
+        InfisicalAuth::UniversalAuth {
+            client_id: "c".into(),
+            client_secret: "s".into(),
+        },
+    ));
+    assert!(b.ping().is_err());
+}

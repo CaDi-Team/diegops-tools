@@ -223,3 +223,25 @@ fn valid_custom_ca_builds_client() {
     let _ = std::fs::remove_file(&path);
     assert!(res.is_ok());
 }
+
+#[test]
+fn ping_looks_up_own_token() {
+    let mut server = mockito::Server::new();
+    let ok = server
+        .mock("GET", "/v1/auth/token/lookup-self")
+        .match_header("x-vault-token", "vt")
+        .with_body("{}")
+        .create();
+    assert!(backend(&server).ping().is_ok());
+    ok.assert();
+}
+
+#[test]
+fn ping_fails_on_bad_token() {
+    let mut server = mockito::Server::new();
+    let _m = server
+        .mock("GET", "/v1/auth/token/lookup-self")
+        .with_status(403)
+        .create();
+    assert!(backend(&server).ping().is_err());
+}

@@ -327,7 +327,7 @@ fn non_empty(v: Option<String>) -> Option<String> {
     v.filter(|s| !s.trim().is_empty())
 }
 
-fn expand(p: &str, home: &Path) -> PathBuf {
+pub fn expand(p: &str, home: &Path) -> PathBuf {
     match p.strip_prefix("~/") {
         Some(rest) => home.join(rest),
         None => PathBuf::from(p),

@@ -8,7 +8,7 @@ use clap::Command;
 pub const GROUPS: &[(&str, &[&str])] = &[
     (
         "Get started",
-        &["bootstrap", "all", "auth", "shell", "explain"],
+        &["bootstrap", "all", "auth", "shell", "doctor", "explain"],
     ),
     ("Secrets", &["vault", "secrets", "kv"]),
     ("Workspace", &["repo", "sync", "devtools"]),

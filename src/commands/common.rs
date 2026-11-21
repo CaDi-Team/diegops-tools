@@ -76,7 +76,7 @@ pub fn resolve_config_path(
 }
 
 /// The `init` command that writes a sample of the given config file.
-fn init_command_for(path: &Path) -> Option<&'static str> {
+pub fn init_command_for(path: &Path) -> Option<&'static str> {
     match path.file_name()?.to_str()? {
         "repos.yaml" => Some("diegops repo init"),
         "secrets.yaml" => Some("diegops secrets init"),

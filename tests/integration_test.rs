@@ -1063,3 +1063,85 @@ fn shell_init_help_lists_what_it_touches() {
         assert!(out.contains(s), "missing {s}: {out}");
     }
 }
+
+// --- #45: doctor ----------------------------------------------------------------
+
+fn doctor_in(tmp: &TmpHome, extra: &[&str]) -> std::process::Output {
+    let mut args = vec!["doctor", "--offline"];
+    args.extend_from_slice(extra);
+    diegops()
+        .args(&args)
+        .env("HOME", tmp.path())
+        .env_remove("DIEGOPS_CONFIG")
+        .env_remove("XDG_CONFIG_HOME")
+        .env_remove("DIEGOPS_SECRETS_BACKEND")
+        .env_remove("INFISICAL_TOKEN")
+        .env_remove("INFISICAL_UNIVERSAL_AUTH_CLIENT_ID")
+        .env_remove("INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET")
+        .env_remove("GITHUB_TOKEN")
+        .output()
+        .expect("run")
+}
+
+#[test]
+fn doctor_fresh_home_fails_with_hints() {
+    let tmp = TmpHome::new();
+    let output = doctor_in(&tmp, &[]);
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    let out = String::from_utf8_lossy(&output.stdout);
+    for s in [
+        "diegops v",
+        "repos.yaml",
+        "diegops repo init",
+        "backend",
+        "diegops explain machine-identity",
+        "github token",
+        "diegops auth gh login",
+    ] {
+        assert!(out.contains(s), "missing {s:?}:\n{out}");
+    }
+    assert!(out.contains('✗') && out.contains('!'), "{out}");
+}
+
+#[test]
+fn doctor_flags_open_client_secret_file() {
+    let tmp = TmpHome::new();
+    let cfg_dir = tmp.path().join(".config/diegops");
+    std::fs::create_dir_all(&cfg_dir).unwrap();
+    let secret = cfg_dir.join("client-secret");
+    std::fs::write(&secret, "x").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&secret, std::fs::Permissions::from_mode(0o644)).unwrap();
+    }
+    std::fs::write(
+        cfg_dir.join("config.toml"),
+        format!(
+            "[infisical]\nproject_id = \"p\"\nclient_id = \"c\"\nclient_secret_file = \"{}\"\n",
+            "~/.config/diegops/client-secret"
+        ),
+    )
+    .unwrap();
+    let out = String::from_utf8_lossy(&doctor_in(&tmp, &[]).stdout).to_string();
+    #[cfg(unix)]
+    assert!(
+        out.contains("chmod 600"),
+        "~ not expanded or perms not checked: {out}"
+    );
+    assert!(out.contains("infisical"), "{out}");
+}
+
+#[test]
+fn doctor_json_is_machine_readable() {
+    let tmp = TmpHome::new();
+    let output = doctor_in(&tmp, &["--json"]);
+    let v: serde_json::Value = serde_json::from_slice(&output.stdout).expect("json");
+    let checks = v["checks"].as_array().expect("checks");
+    assert!(checks.len() >= 5);
+    for c in checks {
+        assert!(["ok", "warn", "fail", "skip"].contains(&c["status"].as_str().unwrap()));
+        assert!(c["name"].is_string());
+    }
+    assert_eq!(v["ok"], false);
+}

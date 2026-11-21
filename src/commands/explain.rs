@@ -123,9 +123,9 @@ pub const GLOSSARY: &[Term] = &[
     Term {
         name: "sync",
         aliases: &["cloud-sync", "config-sync"],
-        summary: "~/.diegops config mirrored to your private GitHub repo",
+        summary: "~/.diegops config mirrored to a private GitHub repo",
         body: "Your diegops YAML files are copied to a private repo named\n\
-               diegops-<github-user> so another machine can pull them.\n\
+               diegops-<github-user>-memory so another machine can pull them.\n\
                Needs a GitHub token (diegops explain pat).\n\
                diegops sync push | pull | status",
         link: README,
