@@ -206,6 +206,10 @@ impl InfisicalBackend {
 }
 
 impl SecretsBackend for InfisicalBackend {
+    fn ping(&self) -> Result<(), BoxError> {
+        self.token().map(|_| ())
+    }
+
     fn name(&self) -> &'static str {
         "infisical"
     }

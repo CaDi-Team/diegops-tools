@@ -81,6 +81,12 @@ fn http_err(op: &str, path: &str, e: ureq::Error) -> BoxError {
 }
 
 impl SecretsBackend for VaultBackend {
+    fn ping(&self) -> Result<(), BoxError> {
+        self.request("GET", "auth/token/lookup-self", None)
+            .map(|_| ())
+            .map_err(|e| http_err("token lookup", "auth/token/lookup-self", e))
+    }
+
     fn name(&self) -> &'static str {
         "vault"
     }
