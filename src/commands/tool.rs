@@ -676,34 +676,59 @@ fn download_and_install(tool: &ToolDef, version: &str) -> Result<(), Box<dyn std
 pub fn list() -> Result<(), Box<dyn std::error::Error>> {
     let bin = bin_dir()?;
 
-    let status_header = "STATUS";
-    println!(
-        "{:<12} {:<30} {:<12} {}",
-        "TOOL", "DESCRIPTION", "VERSION", status_header
-    );
-    println!("{}", "-".repeat(70));
-
-    for tool in REGISTRY {
-        let path = bin.join(if cfg!(windows) {
-            format!("{}.exe", tool.binary_name)
-        } else {
-            tool.binary_name.to_string()
-        });
-
-        let (version, status) = if path.exists() {
-            let ver = detect_installed_version(&path).unwrap_or_else(|| "?".to_string());
-            (ver, "installed")
-        } else {
-            ("-".to_string(), "not installed")
-        };
-
-        println!(
-            "{:<12} {:<30} {:<12} {}",
-            tool.name, tool.description, version, status
-        );
-    }
-
+    let rows: Vec<[String; 4]> = REGISTRY
+        .iter()
+        .map(|tool| {
+            let path = bin.join(if cfg!(windows) {
+                format!("{}.exe", tool.binary_name)
+            } else {
+                tool.binary_name.to_string()
+            });
+            let (version, status) = if path.exists() {
+                let ver = detect_installed_version(&path).unwrap_or_else(|| "?".to_string());
+                (ver, "installed")
+            } else {
+                ("-".to_string(), "not installed")
+            };
+            [
+                tool.name.to_string(),
+                tool.description.to_string(),
+                version,
+                status.to_string(),
+            ]
+        })
+        .collect();
+    print!("{}", table(&rows));
     Ok(())
+}
+
+/// Formats the tool table with columns as wide as their longest value.
+fn table(rows: &[[String; 4]]) -> String {
+    let header = ["TOOL", "DESCRIPTION", "VERSION", "STATUS"];
+    let mut w = header.map(str::len);
+    for r in rows {
+        for (i, c) in r.iter().enumerate() {
+            w[i] = w[i].max(c.chars().count());
+        }
+    }
+    let line = |c: [&str; 4]| {
+        format!(
+            "{:<w0$}  {:<w1$}  {:<w2$}  {}\n",
+            c[0],
+            c[1],
+            c[2],
+            c[3],
+            w0 = w[0],
+            w1 = w[1],
+            w2 = w[2]
+        )
+    };
+    let mut out = line(header);
+    out.push_str(&format!("{}\n", "-".repeat(w.iter().sum::<usize>() + 6)));
+    for r in rows {
+        out.push_str(&line([&r[0], &r[1], &r[2], &r[3]]));
+    }
+    out
 }
 
 /// Handles `diegops tool install <name>`.
@@ -1130,6 +1155,36 @@ mod tests {
         assert_eq!(
             extract_semver("Client Version: v1.30.0"),
             Some("1.30.0".into())
+        );
+    }
+}
+
+#[cfg(test)]
+mod table_tests {
+    #[test]
+    fn columns_fit_the_longest_value() {
+        let rows = vec![
+            [
+                "bao".to_string(),
+                "OpenBao (open-source Vault fork)".into(),
+                "2.7.3".into(),
+                "installed".into(),
+            ],
+            [
+                "gh".to_string(),
+                "GitHub CLI".into(),
+                "-".into(),
+                "not installed".into(),
+            ],
+        ];
+        let t = super::table(&rows);
+        let lines: Vec<&str> = t.lines().collect();
+        let col = lines[0].find("VERSION").unwrap();
+        assert_eq!(lines[2].find("2.7.3"), Some(col), "\n{t}");
+        assert_eq!(
+            lines[3].find('-').map(|_| lines[3].rfind("-").unwrap()),
+            Some(col),
+            "\n{t}"
         );
     }
 }

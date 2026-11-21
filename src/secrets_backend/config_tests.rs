@@ -221,3 +221,14 @@ fn locate_without_project_is_an_error() {
     assert!(m.locate("dpinto-config/x").is_err());
     assert!(m.locate("").is_err());
 }
+
+#[test]
+fn tilde_secret_file_without_home_is_a_clear_error() {
+    let cfg = InfisicalConfig {
+        client_id: Some("c".into()),
+        client_secret_file: Some("~/secret".into()),
+        ..Default::default()
+    };
+    let err = client_secret(&cfg, &env_of(&[])).unwrap_err().to_string();
+    assert!(err.contains("HOME is not set"), "{err}");
+}

@@ -289,8 +289,14 @@ fn client_secret(
         return Ok(s);
     }
     if let Some(f) = c.client_secret_file.as_deref() {
-        let home = std::env::var("HOME").map(PathBuf::from).unwrap_or_default();
-        let path = expand(f, &home);
+        let path = if f.starts_with("~/") {
+            let home = non_empty(env("HOME")).ok_or_else(|| {
+                format!("HOME is not set, so client_secret_file '{f}' cannot be found\n  hint: set HOME or use an absolute path")
+            })?;
+            expand(f, Path::new(&home))
+        } else {
+            PathBuf::from(f)
+        };
         check_private(&path)?;
         let s = std::fs::read_to_string(&path)
             .map_err(|e| format!("could not read {}: {e}", path.display()))?;
