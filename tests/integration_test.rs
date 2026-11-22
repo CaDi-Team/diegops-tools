@@ -1294,3 +1294,44 @@ fn github_env_token_beats_the_stored_one() {
         "status must say the env token is in use: {all}"
     );
 }
+
+#[test]
+fn quiet_and_verbose_conflict() {
+    let home = TmpHome::new();
+    let out = diegops()
+        .env("HOME", home.path())
+        .args(["-q", "-v", "env", "list"])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2));
+}
+
+#[test]
+fn verbose_says_where_the_config_comes_from() {
+    let home = TmpHome::new();
+    let out = diegops()
+        .env("HOME", home.path())
+        .env_remove("DIEGOPS_VAULT_CONFIG")
+        .args(["env", "list", "--verbose"])
+        .output()
+        .unwrap();
+    // No config yet: fails, but verbose already said where it looked.
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("config: "), "{err}");
+    assert!(err.contains("repo-vault.yaml (default)"), "{err}");
+    let out = diegops()
+        .env("HOME", home.path())
+        .env("DIEGOPS_VAULT_CONFIG", home.path().join("x.yaml"))
+        .args(["-v", "env", "list"])
+        .output()
+        .unwrap();
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("x.yaml ($DIEGOPS_VAULT_CONFIG)"), "{err}");
+    // Not verbose: silent about it.
+    let out = diegops()
+        .env("HOME", home.path())
+        .args(["env", "list"])
+        .output()
+        .unwrap();
+    assert!(!String::from_utf8_lossy(&out.stderr).contains("config: "));
+}

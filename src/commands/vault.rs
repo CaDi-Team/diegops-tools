@@ -147,7 +147,7 @@ pub fn apply(
             }
         }
 
-        eprintln!("\n{}", target.path);
+        crate::progress!("\n{}", target.path);
 
         if !dest.exists() {
             eprintln!(
@@ -222,15 +222,15 @@ pub fn apply(
             use super::common::WritePlan;
             match super::common::write_plan(&dest.join(".env"), env_content.as_bytes()) {
                 WritePlan::Unchanged => {
-                    eprintln!("  SKIP  .env unchanged");
+                    crate::progress!("  SKIP  .env unchanged");
                     n_skipped += 1;
                 }
                 WritePlan::Create => {
-                    eprintln!("  WOULD WRITE .env (new file)");
+                    crate::progress!("  WOULD WRITE .env (new file)");
                     n_written += 1;
                 }
                 WritePlan::Replace => {
-                    eprintln!("  WOULD WRITE .env (current file kept as .env.bak)");
+                    crate::progress!("  WOULD WRITE .env (current file kept as .env.bak)");
                     n_written += 1;
                 }
             }
@@ -239,16 +239,13 @@ pub fn apply(
         match write_env_file(&dest, &env_content) {
             Ok((written, backed_up)) => {
                 if !written {
-                    eprintln!("  SKIP  .env unchanged");
+                    crate::progress!("  SKIP  .env unchanged");
                     n_skipped += 1;
                 } else if backed_up {
-                    eprintln!(
-                        "  WRITE .env ({} secrets, backup created)",
-                        all_secrets.len()
-                    );
+                    crate::progress!("  WRITE .env (backup created)");
                     n_written += 1;
                 } else {
-                    eprintln!("  WRITE .env ({} secrets)", all_secrets.len());
+                    crate::progress!("  WRITE .env");
                     n_written += 1;
                 }
             }
@@ -260,7 +257,7 @@ pub fn apply(
         }
     }
 
-    eprintln!();
+    crate::progress!();
     if crate::ui::flags().dry_run {
         println!(
             "Dry run: {n_written} would be written, {n_skipped} unchanged, {} failed. Nothing was changed.",

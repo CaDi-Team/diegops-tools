@@ -103,7 +103,7 @@ fn active_profile() -> Result<Option<String>, Box<dyn std::error::Error>> {
     let raw = std::env::var(PROFILE_ENV).ok();
     let profile = parse_profile(raw.as_deref())?;
     if let Some(p) = &profile {
-        eprintln!("Using sync profile: {p}");
+        crate::progress!("Using sync profile: {p}");
     }
     Ok(profile)
 }
@@ -396,14 +396,14 @@ pub fn push() -> Result<(), Box<dyn std::error::Error>> {
         // Check if cloud already has this exact content
         match get_cloud_file(&token, &owner, &repo, rel_path) {
             Ok(Some(cloud)) if cloud.sha == local_sha => {
-                eprintln!("  SKIP  {rel_path} (unchanged)");
+                crate::progress!("  SKIP  {rel_path} (unchanged)");
                 skipped += 1;
             }
             Ok(existing) => {
                 let sha = existing.as_ref().map(|f| f.sha.as_str());
                 match put_cloud_file(&token, &owner, &repo, rel_path, content, sha) {
                     Ok(()) => {
-                        eprintln!("  PUSH  {rel_path}");
+                        crate::progress!("  PUSH  {rel_path}");
                         uploaded += 1;
                     }
                     Err(e) => {
@@ -476,7 +476,7 @@ pub fn pull() -> Result<(), Box<dyn std::error::Error>> {
                 if local_path.exists() {
                     if let Ok(local_content) = fs::read(&local_path) {
                         if local_content == content {
-                            eprintln!("  SKIP  {path} (unchanged)");
+                            crate::progress!("  SKIP  {path} (unchanged)");
                             skipped += 1;
                             continue;
                         }
@@ -496,7 +496,7 @@ pub fn pull() -> Result<(), Box<dyn std::error::Error>> {
                             let _ =
                                 fs::set_permissions(&local_path, fs::Permissions::from_mode(0o600));
                         }
-                        eprintln!("  PULL  {path}");
+                        crate::progress!("  PULL  {path}");
                         written += 1;
                     }
                     Err(e) => {

@@ -647,6 +647,8 @@ Stores a GitHub token in `~/.diegops/tokens/gh.json` (mode 0600). Resolution (si
 
 **Preview before writing (since v1.8):** `-n/--dry-run` is global and supported by `shell init`, `kv migrate`, `env apply`, `files pull`, `files push` and `agents hermes restore`; it reads the backends, prints what would change (never values) and writes nothing. Other commands reject it with exit 2.
 
+**Output (since v1.8):** `-q/--quiet` hides progress lines (errors, warnings, hints and results still print); `-v/--verbose` prints `diegops: ...` lines saying which config file, secrets backend and GitHub token source are in use (never values). They are mutually exclusive. Data goes to stdout, messages to stderr; diegops only colors clap's help/errors, which honor `NO_COLOR` and `TERM=dumb`.
+
 ### `diegops sync`
 
 The first `push` creates a private repo named `diegops-<github-user>-memory`. With `DIEGOPS_PROFILE=work` it uses `diegops-<github-user>-work-memory` instead. It syncs `~/.diegops/` except `tokens/` and `bin/`. `push` overwrites the cloud copy and `pull` overwrites the local one.

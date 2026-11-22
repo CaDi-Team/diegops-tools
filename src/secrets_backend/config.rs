@@ -168,10 +168,19 @@ pub fn select_kind(
     flag: Option<&str>,
     env: &dyn Fn(&str) -> Option<String>,
 ) -> Result<BackendKind, BoxError> {
-    let chosen = flag
-        .map(str::to_string)
-        .or_else(|| non_empty(env("DIEGOPS_SECRETS_BACKEND")))
-        .or_else(|| cfg.backend.clone());
+    let (chosen, from) = if let Some(f) = flag {
+        (Some(f.to_string()), "--backend")
+    } else if let Some(e) = non_empty(env("DIEGOPS_SECRETS_BACKEND")) {
+        (Some(e), "$DIEGOPS_SECRETS_BACKEND")
+    } else if let Some(c) = cfg.backend.clone() {
+        (Some(c), "config.toml")
+    } else {
+        (None, "default")
+    };
+    crate::debug!(
+        "secrets backend: {} ({from})",
+        chosen.as_deref().unwrap_or("infisical")
+    );
     match chosen.as_deref().map(str::trim) {
         None | Some("infisical") => Ok(BackendKind::Infisical),
         Some("vault") | Some("openbao") => Ok(BackendKind::Vault),
