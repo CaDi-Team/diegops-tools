@@ -97,6 +97,7 @@ pub fn confirm_rule(yes: bool, can_prompt: bool) -> Confirm {
 /// command given `--dry-run` is rejected instead of silently writing.
 pub const DRY_RUN_COMMANDS: &[&str] = &[
     "shell init",
+    "init",
     "kv migrate",
     "env apply",
     "files pull",

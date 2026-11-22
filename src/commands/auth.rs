@@ -270,6 +270,14 @@ pub fn remove_all_tokens() -> Result<usize, Box<dyn std::error::Error>> {
 
 /// Validates and stores a GitHub PAT.
 pub fn gh_login(token: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let login = gh_user(token)?;
+    save_gh_token(token)?;
+    println!("Authenticated as {login}");
+    Ok(())
+}
+
+/// Validates a token with `GET /user`; returns the login. Saves nothing.
+pub fn gh_user(token: &str) -> Result<String, Box<dyn std::error::Error>> {
     let ua = format!("diegops/{}", env!("CARGO_PKG_VERSION"));
     let response = ureq::get("https://api.github.com/user")
         .header("User-Agent", &ua)
@@ -283,9 +291,7 @@ pub fn gh_login(token: &str) -> Result<(), Box<dyn std::error::Error>> {
             let login = json["login"]
                 .as_str()
                 .ok_or("GitHub API response missing 'login'")?;
-            save_gh_token(token)?;
-            println!("Authenticated as {login}");
-            Ok(())
+            Ok(login.to_string())
         }
         Err(ureq::Error::StatusCode(401 | 403)) => {
             Err("token validation failed — check that your PAT is valid and not expired".into())

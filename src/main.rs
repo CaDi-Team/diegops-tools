@@ -65,6 +65,42 @@ pub(crate) struct Cli {
 enum Commands {
     /// Print version information
     Version,
+    /// First-run setup wizard: backend, credentials, GitHub token, then doctor
+    #[command(long_about = "First-run setup wizard.\n\n\
+        Steps: secrets backend → its credentials (validated right away) → GitHub\n\
+        token (validated with GET /user) → review → write → 'diegops doctor'.\n\
+        Steps that already work are shown as ✓ and skipped; --reset STEP redoes one.\n\
+        Every prompt has a flag/env var, so --no-input (or CI) runs the same path.\n\
+        Secrets are never taken as flag values: the Client Secret comes from\n\
+        $INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET, --client-secret-file or a hidden prompt.\n\
+        --dry-run stops at the review screen.")]
+    Init {
+        /// Infisical URL (default Infisical Cloud US)
+        #[arg(long, env = "INFISICAL_API_URL", value_name = "URL")]
+        site_url: Option<String>,
+        /// Infisical project ID
+        #[arg(long, env = "DIEGOPS_INFISICAL_PROJECT_ID", value_name = "ID")]
+        project_id: Option<String>,
+        /// Machine identity Client ID (Universal Auth)
+        #[arg(long, env = "INFISICAL_UNIVERSAL_AUTH_CLIENT_ID", value_name = "ID")]
+        client_id: Option<String>,
+        /// Existing file (mode 600) holding the Client Secret
+        #[arg(
+            long,
+            env = "DIEGOPS_INFISICAL_CLIENT_SECRET_FILE",
+            value_name = "PATH"
+        )]
+        client_secret_file: Option<std::path::PathBuf>,
+        /// Vault/OpenBao address (token: $VAULT_TOKEN or 'bao login')
+        #[arg(long, env = "VAULT_ADDR", value_name = "URL")]
+        vault_addr: Option<String>,
+        /// Do not set up a GitHub token
+        #[arg(long, env = "DIEGOPS_SKIP_GITHUB")]
+        skip_github: bool,
+        /// Redo a step that already works: backend, github, all
+        #[arg(long, value_name = "STEP", value_parser = ["backend", "github", "all"])]
+        reset: Vec<String>,
+    },
     /// Check this machine's setup and show how to fix each problem
     #[command(
         long_about = "Check this machine's setup and show how to fix each problem.\n\n\
@@ -403,7 +439,7 @@ fn render_error(msg: &str) -> String {
 }
 
 /// The full command tree with examples and the ENVIRONMENT section attached.
-fn cli_command() -> clap::Command {
+pub(crate) fn cli_command() -> clap::Command {
     examples::apply(Cli::command())
 }
 
@@ -450,6 +486,29 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         std::env::set_var("DIEGOPS_SECRETS_BACKEND", b);
     }
     match cli.command {
+        Some(Commands::Init {
+            site_url,
+            project_id,
+            client_id,
+            client_secret_file,
+            vault_addr,
+            skip_github,
+            reset,
+        }) => {
+            commands::init::run(commands::init::Given {
+                backend: backend
+                    .clone()
+                    .or_else(|| std::env::var("DIEGOPS_SECRETS_BACKEND").ok()),
+                site_url,
+                project_id,
+                client_id,
+                client_secret_file,
+                client_secret: std::env::var("INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET").ok(),
+                vault_addr,
+                skip_github,
+                reset,
+            })?;
+        }
         Some(Commands::Doctor { offline }) => {
             commands::doctor::run(ui::flags().json, offline)?;
         }
