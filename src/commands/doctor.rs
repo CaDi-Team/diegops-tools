@@ -42,7 +42,7 @@ impl Check {
 }
 
 /// YAML configs: (file, env override, init command, what it is for).
-const YAML_CONFIGS: &[(&str, &str, &str)] = &[
+pub(crate) const YAML_CONFIGS: &[(&str, &str, &str)] = &[
     ("repos.yaml", "DIEGOPS_REPOS_CONFIG", "repos to clone"),
     (
         "secrets.yaml",

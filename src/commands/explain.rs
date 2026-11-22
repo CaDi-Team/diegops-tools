@@ -134,12 +134,12 @@ pub const GLOSSARY: &[Term] = &[
         name: "config",
         aliases: &["config-files", "config.toml", "yaml"],
         summary: "where diegops settings live (config.toml + ~/.diegops/*.yaml)",
-        body: "~/.config/diegops/config.toml   secrets backend settings\n\
+        body: "~/.config/diegops/config.toml   how diegops connects (backend, credentials)\n\
                ~/.diegops/repos.yaml           repos to clone\n\
                ~/.diegops/secrets.yaml         secret files to back up\n\
                ~/.diegops/repo-vault.yaml      .env files to write\n\
-               ~/.diegops/agents.yaml          AI agents to back up\n\
-               Each '<command> init' writes a sample. Env vars: diegops --help",
+               ~/.diegops/agents.yaml          AI agents to back up (YAMLs synced)\n\
+               Resolved paths, env overrides and rules: diegops config path",
         link: README,
     },
     Term {

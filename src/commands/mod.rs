@@ -9,6 +9,7 @@ pub mod auth;
 pub mod bootstrap;
 pub mod cadi;
 pub mod common;
+pub mod config_cmd;
 pub mod devtools;
 pub mod devtools_git;
 pub mod devtools_gpg;

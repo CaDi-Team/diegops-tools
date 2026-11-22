@@ -15,6 +15,7 @@ pub const GROUPS: &[(&str, &[&str])] = &[
             "auth",
             "shell",
             "doctor",
+            "config",
             "explain",
         ],
     ),
