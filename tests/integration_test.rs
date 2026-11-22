@@ -1228,13 +1228,13 @@ fn dry_run_on_a_command_without_it_is_a_usage_error() {
     let home = TmpHome::new();
     let out = diegops()
         .env("HOME", home.path())
-        .args(["env", "apply", "--dry-run"])
+        .args(["env", "list", "--dry-run"])
         .output()
         .unwrap();
     assert_eq!(out.status.code(), Some(2));
     let err = String::from_utf8_lossy(&out.stderr);
     assert!(
-        err.contains("--dry-run is not supported by 'diegops env apply'"),
+        err.contains("--dry-run is not supported by 'diegops env list'"),
         "{err}"
     );
 }

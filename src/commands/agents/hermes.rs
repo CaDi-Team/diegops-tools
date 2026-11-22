@@ -252,6 +252,39 @@ pub fn verify(dir: &Path, m: &BTreeMap<String, String>) -> Result<Vec<String>, B
     Ok(bad)
 }
 
+/// What [`restore_into`] would do (`--dry-run`); never writes.
+#[derive(Debug, Default)]
+pub struct RestorePlan {
+    pub created: usize,
+    pub unchanged: usize,
+    /// Files that differ and would be replaced (a `.pre-restore` copy kept).
+    pub replaced: Vec<String>,
+}
+
+/// Plans a restore of `repo_dir` into `target`; `Err` if it would be refused.
+pub fn plan_restore(repo_dir: &Path, target: &Path, force: bool) -> Result<RestorePlan, BoxError> {
+    let exists = ["SOUL.md", "config.yaml"]
+        .iter()
+        .any(|f| target.join(f).exists());
+    if exists && !force {
+        return Err(format!(
+            "{} already has a profile; pass --force to overwrite (a .pre-restore copy is kept)",
+            target.display()
+        )
+        .into());
+    }
+    let mut plan = RestorePlan::default();
+    for rel in manifest(repo_dir)?.keys() {
+        let bytes = fs::read(join_rel(repo_dir, rel))?;
+        match fs::read(join_rel(target, rel)) {
+            Ok(old) if old == bytes => plan.unchanged += 1,
+            Ok(_) => plan.replaced.push(rel.clone()),
+            Err(_) => plan.created += 1,
+        }
+    }
+    Ok(plan)
+}
+
 /// Copies a backed-up profile (`repo_dir`) into `target` and verifies hashes.
 /// An existing profile is only overwritten with `force`; replaced files are
 /// kept as `<name>.pre-restore`.
@@ -504,6 +537,32 @@ pub fn restore(reg: &Registry, o: &RestoreOpts) -> Result<(), BoxError> {
             (None, n) => ctx.root.join("profiles").join(n),
         };
         let src = ctx.repo_profile(name);
+        if crate::ui::flags().dry_run {
+            match plan_restore(&src, &target, o.force) {
+                Ok(p) => {
+                    println!(
+                        "would restore {name} → {}: {} new, {} replaced (kept as .pre-restore), {} unchanged",
+                        target.display(),
+                        p.created,
+                        p.replaced.len(),
+                        p.unchanged
+                    );
+                    for r in &p.replaced {
+                        println!("  replace {r}");
+                    }
+                    if !o.no_secrets && ctx.secrets_path.is_some() {
+                        println!("  would inject .env from the secrets backend");
+                    }
+                    restored += 1;
+                }
+                Err(e) if o.missing_only => {
+                    eprintln!("skip {name}: already present");
+                    let _ = e;
+                }
+                Err(e) => println!("would refuse {name}: {e}"),
+            }
+            continue;
+        }
         match restore_into(&src, &target, o.force) {
             Ok(n) => {
                 let digest = tree_digest(&manifest(&src)?);
@@ -525,7 +584,11 @@ pub fn restore(reg: &Registry, o: &RestoreOpts) -> Result<(), BoxError> {
             inject_env(&ctx, name, &target)?;
         }
     }
-    eprintln!("{restored} profile(s) restored");
+    if crate::ui::flags().dry_run {
+        eprintln!("Dry run: {restored} profile(s) would be restored. Nothing was changed (the backup clone was updated with git pull).");
+    } else {
+        eprintln!("{restored} profile(s) restored");
+    }
     Ok(())
 }
 

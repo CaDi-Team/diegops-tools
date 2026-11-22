@@ -60,7 +60,14 @@ pub fn confirm_rule(yes: bool, can_prompt: bool) -> Confirm {
 
 /// Commands (space-joined path) that implement `--dry-run`. Any other
 /// command given `--dry-run` is rejected instead of silently writing.
-pub const DRY_RUN_COMMANDS: &[&str] = &["shell init", "kv migrate"];
+pub const DRY_RUN_COMMANDS: &[&str] = &[
+    "shell init",
+    "kv migrate",
+    "env apply",
+    "files pull",
+    "files push",
+    "agents hermes restore",
+];
 
 /// `Err` (usage) if `--dry-run` was given to a command that cannot honour it.
 pub fn check_dry_run(dry_run: bool, path: &str) -> Result<(), String> {
@@ -147,12 +154,12 @@ mod tests {
 
     #[test]
     fn dry_run_is_rejected_where_not_implemented() {
-        assert!(check_dry_run(false, "env apply").is_ok());
+        assert!(check_dry_run(false, "env list").is_ok());
         assert!(check_dry_run(true, "shell init").is_ok());
         assert!(check_dry_run(true, "kv migrate").is_ok());
-        let e = check_dry_run(true, "env apply").unwrap_err();
+        let e = check_dry_run(true, "env list").unwrap_err();
         assert!(
-            e.starts_with("error: --dry-run is not supported by 'diegops env apply'"),
+            e.starts_with("error: --dry-run is not supported by 'diegops env list'"),
             "{e}"
         );
         assert!(e.contains("'diegops shell init'"), "{e}");
