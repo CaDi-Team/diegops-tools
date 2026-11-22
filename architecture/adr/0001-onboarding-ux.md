@@ -103,6 +103,10 @@ Defined once on the root command, `global = true`, with the same meaning everywh
 - Infisical auto-setup (create project + machine identity + client secret) and GitHub device flow are **spikes first**. They must not depend on undocumented storage of another CLI, must state the permissions and free-tier limits they need, and must roll back on failure.
 - The paste paths (Infisical Client ID/Secret, GitHub fine-grained PAT, `gh auth token`) stay supported permanently.
 
+#### D9 amendment — spike outcomes (2026-11-22, accepted)
+- **Infisical (#53):** delegate the user login to the official CLI (`infisical login`, browser), then read the user token through the documented `infisical user get token --plain`. With it, diegops calls the documented API to create a machine identity, attach Universal Auth, add it to the project and mint a client secret, written 0600 to `client_secret_file`. Rollback: delete the identity if any later step fails. We do not reimplement the browser login (undocumented protocol). Requires the `infisical` CLI (installable via `diegops tool`). **Gate:** one live run proving the API accepts a user token for identity creation; if not, #53 stays paste-only.
+- **GitHub (#54):** a CaDi-Team **GitHub App** with device flow enabled, not an OAuth App (`repo` scope would grant every private repo). Installed on selected repos only (sync repo, `contents: read/write`). User tokens expire in 8 h; diegops stores the refresh token (6 months) in `gh.json` 0600 and refreshes transparently. The client ID is public and ships in the binary; there is no client secret. Registration in the org is free (no plan change).
+
 ## Owner answers (2026-11-21)
 
 All four open points accepted as recommended:
