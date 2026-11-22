@@ -321,6 +321,15 @@ Done: 3 pushed, 0 unchanged, 0 failed
 
 ---
 
+## Where settings live
+
+Two places, on purpose (ADR 0001 D7):
+
+- `~/.config/diegops/config.toml`: **how** diegops connects (secrets backend, credential references). Per machine; `$DIEGOPS_CONFIG` or `$XDG_CONFIG_HOME` move it.
+- `~/.diegops/*.yaml` (`repos`, `secrets`, `repo-vault`, `agents`): **what** diegops manages. Backed up by `diegops sync`; each has a `$DIEGOPS_*_CONFIG` override.
+
+`diegops config path` prints every resolved path, the rule that chose it and whether it exists (`--json` too).
+
 ## Which backend should I use?
 
 ```mermaid
@@ -673,6 +682,7 @@ Stores a GitHub token in `~/.diegops/tokens/gh.json` (mode 0600). Resolution (si
 - `kv get <path>` → `{backend, path, keys: [names]}` (`--key` with `--json` exits 2)
 - `repo list` / `repo list-diff` → `{targets: [{path, repos: [{name, url}]}], total}` (cloned / not yet cloned)
 - `tool list` → `{tools: [{name, description, installed, version|null}]}`
+- `config path` → `{paths: [{name, path, rule, exists, purpose}]}`
 - `agents status` → `{agents: [{agent, last_run: {last_ok, last_attempt, last_error, files, bytes, commit}|null}]}` (unix times)
 - `agents hermes status` → `{root, repo, last_run, profiles: [{name, backed_up, definition_changes, memories_to_review}]}`
 

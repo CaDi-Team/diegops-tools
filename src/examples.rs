@@ -7,6 +7,8 @@ use clap::Command;
 pub const EXAMPLES: &[(&str, &str)] = &[
     ("version", "diegops version"),
     ("init", "diegops init                 # guided first run (prompts, validates, reviews)\ndiegops init --dry-run       # stop at the review screen\nINFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET=... diegops init --no-input --project-id P --client-id C --skip-github"),
+    ("config", "diegops config path          # where every settings file lives"),
+    ("config path", "diegops config path          # every settings file, its rule, whether it exists\ndiegops config path --json | jq '.paths[] | select(.exists|not)'"),
     ("doctor", "diegops doctor              # check everything, with a hint per problem\ndiegops doctor --offline    # no network calls\ndiegops doctor --json | jq '.checks[] | select(.status==\"fail\")'"),
     ("explain", "diegops explain                     # list all terms\ndiegops explain machine-identity    # what it is and where to get one"),
     ("completion", "diegops completion zsh > ~/.zfunc/_diegops     # or: source <(diegops completion zsh)\ndiegops completion bash > ~/.local/share/bash-completion/completions/diegops\ndiegops completion fish > ~/.config/fish/completions/diegops.fish\ndiegops man | man -l -                              # read the man page"),

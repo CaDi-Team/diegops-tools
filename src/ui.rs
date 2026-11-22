@@ -131,6 +131,7 @@ pub const JSON_COMMANDS: &[&str] = &[
     "repo list",
     "repo list-diff",
     "tool list",
+    "config path",
     "agents status",
     "agents hermes status",
 ];

@@ -62,6 +62,19 @@ pub(crate) struct Cli {
 }
 
 #[derive(Subcommand)]
+enum ConfigCommand {
+    /// Every file diegops reads, the rule that chose it, and whether it exists
+    #[command(
+        long_about = "Every file diegops reads, the rule that chose it, and whether it exists.\n\n\
+        ~/.config/diegops/config.toml  how diegops connects (backend, credential refs)\n\
+        ~/.diegops/*.yaml              what diegops manages (repos, files, .env, agents),\n\
+                                       backed up by 'diegops sync'\n\
+        Rules: $DIEGOPS_CONFIG / $XDG_CONFIG_HOME, and $DIEGOPS_*_CONFIG per YAML file."
+    )]
+    Path,
+}
+
+#[derive(Subcommand)]
 enum Commands {
     /// Print version information
     Version,
@@ -100,6 +113,11 @@ enum Commands {
         /// Redo a step that already works: backend, github, all
         #[arg(long, value_name = "STEP", value_parser = ["backend", "github", "all"])]
         reset: Vec<String>,
+    },
+    /// Show where diegops reads its settings from
+    Config {
+        #[command(subcommand)]
+        cmd: ConfigCommand,
     },
     /// Check this machine's setup and show how to fix each problem
     #[command(
@@ -508,6 +526,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 skip_github,
                 reset,
             })?;
+        }
+        Some(Commands::Config {
+            cmd: ConfigCommand::Path,
+        }) => {
+            commands::config_cmd::path(ui::flags().json)?;
         }
         Some(Commands::Doctor { offline }) => {
             commands::doctor::run(ui::flags().json, offline)?;
