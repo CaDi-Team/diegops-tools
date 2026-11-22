@@ -10,7 +10,7 @@ pub const GROUPS: &[(&str, &[&str])] = &[
         "Get started",
         &["bootstrap", "all", "auth", "shell", "doctor", "explain"],
     ),
-    ("Secrets", &["vault", "secrets", "kv"]),
+    ("Secrets", &["env", "files", "kv"]),
     ("Workspace", &["repo", "sync", "devtools"]),
     ("Tools", &["tool", "ktool"]),
     ("AI agents", &["agents"]),
@@ -106,10 +106,22 @@ fn levenshtein(a: &str, b: &str) -> usize {
     prev[b.len()]
 }
 
+/// Renamed top-level commands (old, new), ADR 0001 D1. Old names are hidden
+/// aliases; typos of them suggest the new name.
+pub const RENAMED: &[(&str, &str)] = &[("vault", "env"), ("secrets", "files")];
+
 /// `error: unknown command '<x>'` with a suggestion or a pointer to help.
 pub fn unknown_command(name: &str, candidates: &[String], help_cmd: &str) -> String {
     let mut msg = format!("error: unknown command '{name}'");
-    if let Some(s) = suggest(name, candidates) {
+    let mut all = candidates.to_vec();
+    all.extend(RENAMED.iter().map(|(old, _)| old.to_string()));
+    let suggestion = suggest(name, &all).map(|s| {
+        RENAMED
+            .iter()
+            .find(|(old, _)| *old == s)
+            .map_or(s, |(_, new)| *new)
+    });
+    if let Some(s) = suggestion {
         msg.push_str(&format!("\n  hint: did you mean '{s}'?"));
     }
     msg.push_str(&format!(

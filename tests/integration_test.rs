@@ -793,7 +793,7 @@ fn typo_in_top_level_command_suggests_closest() {
     let output = diegops().arg("secret").output().expect("run");
     assert_eq!(output.status.code(), Some(2));
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("did you mean 'secrets'?"), "got: {stderr}");
+    assert!(stderr.contains("did you mean 'files'?"), "got: {stderr}");
 }
 
 #[test]
@@ -1144,4 +1144,56 @@ fn doctor_json_is_machine_readable() {
         assert!(c["name"].is_string());
     }
     assert_eq!(v["ok"], false);
+}
+
+// --- #48: vault -> env, secrets -> files (ADR 0001 D1) ---
+
+#[test]
+fn env_and_files_are_the_documented_names() {
+    let out = diegops().arg("--help").output().unwrap();
+    let help = String::from_utf8_lossy(&out.stdout);
+    assert!(help.contains("  env "), "help must list env:\n{help}");
+    assert!(help.contains("  files "), "help must list files:\n{help}");
+    assert!(!help.contains("  vault "), "vault must be hidden:\n{help}");
+    assert!(
+        !help.contains("  secrets "),
+        "secrets must be hidden:\n{help}"
+    );
+    for (cmd, sub) in [("env", "list-diff"), ("files", "status")] {
+        let out = diegops().args([cmd, "--help"]).output().unwrap();
+        assert!(out.status.success(), "{cmd} --help failed");
+        assert!(String::from_utf8_lossy(&out.stdout).contains(sub));
+        assert!(out.stderr.is_empty(), "{cmd} must not warn");
+    }
+}
+
+#[test]
+fn old_names_still_work_and_warn() {
+    let home = TmpHome::new();
+    for (old, new) in [("vault", "env"), ("secrets", "files")] {
+        let old_out = diegops()
+            .env("HOME", home.path())
+            .args([old, "init"])
+            .output()
+            .unwrap();
+        let err = String::from_utf8_lossy(&old_out.stderr);
+        assert!(
+            err.contains(&format!("warning: 'diegops {old}' is now 'diegops {new}'")),
+            "{old}: {err}"
+        );
+        assert!(old_out.status.success(), "{old} init failed: {err}");
+    }
+}
+
+#[test]
+fn hints_use_the_new_names() {
+    let home = TmpHome::new();
+    let out = diegops()
+        .env("HOME", home.path())
+        .args(["env", "list"])
+        .output()
+        .unwrap();
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("diegops env init"), "got: {err}");
+    assert!(!err.contains("diegops vault"), "got: {err}");
 }

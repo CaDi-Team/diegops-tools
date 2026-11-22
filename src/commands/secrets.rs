@@ -68,7 +68,7 @@ pub enum SecretsCommand {
     ///
     /// Reads repos.yaml, walks every target path, and adds any CLAUDE.md or
     /// AGENTS.md found there to secrets.yaml. Files already tracked are skipped.
-    /// Run `diegops secrets push` afterwards to upload them to Vault.
+    /// Run `diegops files push` afterwards to upload them to Vault.
     Update {
         /// Path to the repos.yaml config file.
         #[arg(long)]
@@ -310,7 +310,7 @@ pub fn init(base_dir: Option<&Path>) -> Result<(), Box<dyn std::error::Error>> {
 
     if config_path.exists() {
         println!("Config already exists: {}", config_path.display());
-        println!("Edit it directly or run `diegops secrets status` to see sync state.");
+        println!("Edit it directly or run `diegops files status` to see sync state.");
         return Ok(());
     }
 
@@ -318,17 +318,17 @@ pub fn init(base_dir: Option<&Path>) -> Result<(), Box<dyn std::error::Error>> {
     fs::write(&config_path, SAMPLE_SECRETS_CONFIG)?;
 
     println!("Created: {}", config_path.display());
-    println!("Edit the file to add your secrets folders, then run `diegops secrets push`.");
+    println!("Edit the file to add your secrets folders, then run `diegops files push`.");
     Ok(())
 }
 
 const SAMPLE_SECRETS_CONFIG: &str = "\
-# diegops secrets configuration
+# diegops files configuration
 #
 # Each folder maps a local destination directory to a Vault secret path.
-# Run `diegops secrets push` to upload local files to Vault.
-# Run `diegops secrets pull` to download files from Vault.
-# Run `diegops secrets status` to see the current sync state.
+# Run `diegops files push` to upload local files to Vault.
+# Run `diegops files pull` to download files from Vault.
+# Run `diegops files status` to see the current sync state.
 #
 # Path rules:
 #   - Use $HOME as a portable prefix (works on Linux, macOS, and WSL).
@@ -340,8 +340,8 @@ const SAMPLE_SECRETS_CONFIG: &str = "\
 #
 # Workflow:
 #   1. Edit this file to list the folders and files you want to sync.
-#   2. Run `diegops secrets push` to upload your local files to Vault.
-#   3. On a new machine, run `diegops secrets pull` to restore them.
+#   2. Run `diegops files push` to upload your local files to Vault.
+#   3. On a new machine, run `diegops files pull` to restore them.
 
 folders:
 
@@ -542,7 +542,7 @@ pub fn push(
             "folder",
             n_pushed + n_unchanged + failures.len(),
             &failures,
-            "fix the errors above, then rerun 'diegops secrets push'",
+            "fix the errors above, then rerun 'diegops files push'",
         ));
     }
 
@@ -719,7 +719,7 @@ pub fn pull(
             "folder",
             n_written + n_unchanged + failures.len(),
             &failures,
-            "fix the errors above, then rerun 'diegops secrets pull'",
+            "fix the errors above, then rerun 'diegops files pull'",
         ));
     }
 
@@ -839,7 +839,7 @@ pub fn status(config_path: Option<&Path>) -> Result<(), Box<dyn std::error::Erro
 
 /// Scans all repo target paths from `repos.yaml` for `CLAUDE.md` and
 /// `AGENTS.md`, then registers any untracked files in `secrets.yaml` so they
-/// are included on the next `diegops secrets push`.
+/// are included on the next `diegops files push`.
 ///
 /// The parent folder of a group of repos (e.g. `$HOME/github/org/group/`) is
 /// not itself a git repository, so project-level agent files placed there
@@ -930,7 +930,7 @@ pub fn update(
         );
 
         new_yaml_entries.push(format!(
-            "\n  # Agent file registered by `diegops secrets update`\n  - dest: {dest_str}\n    vault_path: {vault_path}\n    keys:\n{keys_yaml}"
+            "\n  # Agent file registered by `diegops files update`\n  - dest: {dest_str}\n    vault_path: {vault_path}\n    keys:\n{keys_yaml}"
         ));
     }
 
@@ -938,7 +938,7 @@ pub fn update(
 
     let n_added = to_add.len();
     println!(
-        "\nAdded {n_added} entr{}. Run `diegops secrets push` to back them up to Vault.",
+        "\nAdded {n_added} entr{}. Run `diegops files push` to back them up to Vault.",
         if n_added == 1 { "y" } else { "ies" }
     );
     if n_skipped > 0 {
