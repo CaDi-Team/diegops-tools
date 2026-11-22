@@ -1422,3 +1422,65 @@ fn doctor_json_works_as_a_global_flag() {
         .unwrap();
     assert!(json_of(&out)["checks"].is_array());
 }
+
+fn init_in(tmp: &TmpHome, args: &[&str]) -> std::process::Output {
+    diegops()
+        .arg("init")
+        .args(args)
+        .env("HOME", &tmp.0)
+        .env("CI", "1")
+        .env_remove("DIEGOPS_CONFIG")
+        .env_remove("XDG_CONFIG_HOME")
+        .env_remove("DIEGOPS_SECRETS_BACKEND")
+        .env_remove("INFISICAL_TOKEN")
+        .env_remove("INFISICAL_API_URL")
+        .env_remove("INFISICAL_UNIVERSAL_AUTH_CLIENT_ID")
+        .env_remove("INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET")
+        .env_remove("DIEGOPS_INFISICAL_PROJECT_ID")
+        .env_remove("VAULT_ADDR")
+        .env_remove("VAULT_TOKEN")
+        .env_remove("GITHUB_TOKEN")
+        .env_remove("GH_TOKEN")
+        .env("DIEGOPS_NO_GH_CLI", "1")
+        .output()
+        .expect("run")
+}
+
+#[test]
+fn init_without_terminal_names_the_missing_flag_and_writes_nothing() {
+    let tmp = TmpHome::new();
+    let out = init_in(&tmp, &["--backend", "infisical", "--skip-github"]);
+    assert_eq!(out.status.code(), Some(1), "{out:?}");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        err.contains("--project-id") && err.contains("DIEGOPS_INFISICAL_PROJECT_ID"),
+        "{err}"
+    );
+    assert!(!tmp.0.join(".config/diegops/config.toml").exists());
+}
+
+#[test]
+fn init_rejects_unknown_reset_step() {
+    let tmp = TmpHome::new();
+    let out = init_in(&tmp, &["--reset", "nope"]);
+    assert_eq!(out.status.code(), Some(2), "{out:?}");
+}
+
+#[test]
+fn init_vault_without_token_fails_with_login_hint() {
+    let tmp = TmpHome::new();
+    let out = init_in(
+        &tmp,
+        &[
+            "--backend",
+            "vault",
+            "--vault-addr",
+            "http://127.0.0.1:9",
+            "--skip-github",
+        ],
+    );
+    assert_eq!(out.status.code(), Some(1), "{out:?}");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("bao login"), "{err}");
+    assert!(!tmp.0.join(".config/diegops/config.toml").exists());
+}

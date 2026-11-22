@@ -68,14 +68,23 @@ pub fn open_kind(
     cfg: &config::Config,
     kind: config::BackendKind,
 ) -> Result<Box<dyn SecretsBackend>, BoxError> {
+    open_with_env(cfg, kind, &real_env, &home())
+}
+
+/// Opens a backend with an explicit env (used by `init` to validate answers
+/// before anything is written).
+pub fn open_with_env(
+    cfg: &config::Config,
+    kind: config::BackendKind,
+    env: &dyn Fn(&str) -> Option<String>,
+    home: &std::path::Path,
+) -> Result<Box<dyn SecretsBackend>, BoxError> {
     Ok(match kind {
         config::BackendKind::Infisical => Box::new(infisical::InfisicalBackend::new(
-            config::resolve_infisical(cfg, &real_env)?,
+            config::resolve_infisical(cfg, env)?,
         )),
         config::BackendKind::Vault => Box::new(vault::VaultBackend::new(config::resolve_vault(
-            cfg,
-            &real_env,
-            &home(),
+            cfg, env, home,
         )?)?),
     })
 }

@@ -15,6 +15,7 @@ pub mod devtools_gpg;
 pub mod devtools_ssh;
 pub mod doctor;
 pub mod explain;
+pub mod init;
 pub mod ktool;
 pub mod kv;
 pub mod repo;

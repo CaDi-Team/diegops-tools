@@ -11,7 +11,7 @@ name = "diegops"
 path = "src/main.rs"
 
 [dependencies]
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive", "env"] }
 # ureq: sync HTTP client + JSON parsing (no async required).
 # default-features = false disables gzip; the "rustls" feature uses rustls + ring
 # (pure Rust, no C OpenSSL dependency) — required for static musl builds.
@@ -31,6 +31,8 @@ regex = "1"
 clap_complete = "4"
 clap_mangen = "0.3"
 rpassword = "7"
+# Prompts for `diegops init` (ADR 0001 D5); no fuzzy matcher to save size.
+inquire = { version = "0.9.5", default-features = false, features = ["crossterm"] }
 
 # Unix targets: extract .tar.gz release archives
 [target.'cfg(unix)'.dependencies]

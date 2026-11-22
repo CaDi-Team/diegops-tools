@@ -186,13 +186,27 @@ These are the free-tier limits that matter here (see [pricing](https://infisical
 
 ### First-time setup at a glance
 
+**Shortcut:** after Steps 1 and 2 (account, project, machine identity), run
+`diegops init`. It asks for the project ID, Client ID and Client Secret
+(hidden), checks them against Infisical right away, sets up your GitHub
+token, shows a review, writes `config.toml` and the secret file (mode 600),
+and ends with `diegops doctor`. Steps that already work are skipped; use
+`--reset backend` to redo one and `--dry-run` to stop at the review. In CI:
+
+```sh
+INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET=... diegops init --no-input --yes \
+  --project-id <id> --client-id <id> --skip-github
+```
+
+The manual steps below are what `init` does for you.
+
 ```mermaid
 flowchart TD
     A[Install diegops] --> B[Sign up at app.infisical.com]
     B --> C[Create project, keep env 'prod']
     C --> D[Create machine identity<br/>with Universal Auth]
     D --> E[Add identity to project as Admin]
-    E --> F[Store client secret locally<br/>file 0600 or OS keyring]
+    E --> F[Store client secret locally<br/>file 0600]
     F --> G[Write ~/.config/diegops/config.toml]
     G --> H{diegops kv backend<br/>says infisical?}
     H -- yes --> I[diegops files init, edit, push]
