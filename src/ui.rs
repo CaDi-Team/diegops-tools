@@ -10,6 +10,8 @@ pub struct Flags {
     pub yes: bool,
     pub no_input: bool,
     pub dry_run: bool,
+    pub quiet: bool,
+    pub verbose: bool,
 }
 
 static FLAGS: OnceLock<Flags> = OnceLock::new();
@@ -22,6 +24,38 @@ pub fn set(flags: Flags) {
 /// The global flags (defaults if not set, e.g. in unit tests).
 pub fn flags() -> Flags {
     FLAGS.get().copied().unwrap_or_default()
+}
+
+/// Progress lines (stderr) unless `--quiet`. Errors, warnings, hints and
+/// results are never hidden.
+pub fn show_progress(f: Flags) -> bool {
+    !f.quiet
+}
+
+/// Diagnostic lines (where config/backend/token come from) with `--verbose`.
+pub fn show_debug(f: Flags) -> bool {
+    f.verbose
+}
+
+/// Progress line on stderr, hidden by `--quiet`.
+#[macro_export]
+macro_rules! progress {
+    ($($t:tt)*) => {
+        if $crate::ui::show_progress($crate::ui::flags()) {
+            eprintln!($($t)*);
+        }
+    };
+}
+
+/// Diagnostic line on stderr (`diegops: ...`), shown only with `--verbose`.
+/// Never pass secret values.
+#[macro_export]
+macro_rules! debug {
+    ($($t:tt)*) => {
+        if $crate::ui::show_debug($crate::ui::flags()) {
+            eprintln!("diegops: {}", format!($($t)*));
+        }
+    };
 }
 
 /// What a confirmation does.
@@ -116,6 +150,18 @@ pub fn confirm(question: &str) -> Result<bool, Box<dyn std::error::Error>> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn quiet_hides_progress_verbose_shows_debug() {
+        let f = |quiet, verbose| Flags {
+            quiet,
+            verbose,
+            ..Flags::default()
+        };
+        assert!(show_progress(f(false, false)) && !show_debug(f(false, false)));
+        assert!(!show_progress(f(true, false)));
+        assert!(show_progress(f(false, true)) && show_debug(f(false, true)));
+    }
+
     use super::*;
 
     fn env_of(pairs: &'static [(&'static str, &'static str)]) -> impl Fn(&str) -> Option<String> {

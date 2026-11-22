@@ -63,16 +63,15 @@ pub fn resolve_config_path(
     env_var: &str,
     default_filename: &str,
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    match cli_path {
-        Some(p) => Ok(p.to_owned()),
-        None => {
-            if let Ok(env_path) = std::env::var(env_var) {
-                Ok(PathBuf::from(env_path))
-            } else {
-                Ok(diegops_dir()?.join(default_filename))
-            }
-        }
-    }
+    let (path, from) = match cli_path {
+        Some(p) => (p.to_owned(), "--config".to_string()),
+        None => match std::env::var(env_var) {
+            Ok(env_path) => (PathBuf::from(env_path), format!("${env_var}")),
+            Err(_) => (diegops_dir()?.join(default_filename), "default".into()),
+        },
+    };
+    crate::debug!("config: {} ({from})", path.display());
+    Ok(path)
 }
 
 /// The `init` command that writes a sample of the given config file.

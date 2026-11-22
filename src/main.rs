@@ -47,6 +47,12 @@ pub(crate) struct Cli {
     /// Show what would change and change nothing (commands that write)
     #[arg(short = 'n', long, global = true)]
     dry_run: bool,
+    /// Hide progress lines (errors, warnings and results still print)
+    #[arg(short = 'q', long, global = true, conflicts_with = "verbose")]
+    quiet: bool,
+    /// Explain where config, backend and credentials come from
+    #[arg(short = 'v', long, global = true)]
+    verbose: bool,
     /// Secrets backend: infisical | vault (alias openbao). Overrides $DIEGOPS_SECRETS_BACKEND
     #[arg(long, global = true, value_name = "NAME")]
     backend: Option<String>,
@@ -403,6 +409,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         yes,
         no_input: cli.no_input,
         dry_run,
+        quiet: cli.quiet,
+        verbose: cli.verbose,
     });
     if let Err(msg) = ui::check_dry_run(dry_run, &command_path(&matches)) {
         eprintln!("{msg}");

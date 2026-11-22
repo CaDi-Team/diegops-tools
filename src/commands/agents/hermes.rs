@@ -456,7 +456,7 @@ fn withheld_error(skipped: &[String]) -> BoxError {
 /// `diegops agents hermes backup`: agent definitions → git (memories excluded).
 pub fn backup(reg: &Registry, only: Option<&str>) -> Result<(), BoxError> {
     let ctx = Ctx::from_registry(reg)?;
-    eprintln!("hermes backup → {}", ctx.repo.display());
+    crate::progress!("hermes backup → {}", ctx.repo.display());
     let res = sync_and_push(&ctx, only, Set::Definition, "back up agent context");
     let mut state = support::RunState::load()?;
     let outcome = match &res {
@@ -489,7 +489,7 @@ fn heartbeat(kv: &str, backend: Option<&str>) -> Result<(), BoxError> {
         .build()
         .call()
         .map_err(|e| format!("heartbeat ping failed: {e}"))?;
-    eprintln!("heartbeat sent");
+    crate::progress!("heartbeat sent");
     Ok(())
 }
 
@@ -556,7 +556,7 @@ pub fn restore(reg: &Registry, o: &RestoreOpts) -> Result<(), BoxError> {
                     restored += 1;
                 }
                 Err(e) if o.missing_only => {
-                    eprintln!("skip {name}: already present");
+                    crate::progress!("skip {name}: already present");
                     let _ = e;
                 }
                 Err(e) => println!("would refuse {name}: {e}"),
@@ -574,7 +574,7 @@ pub fn restore(reg: &Registry, o: &RestoreOpts) -> Result<(), BoxError> {
                 restored += 1;
             }
             Err(e) if o.missing_only => {
-                eprintln!("skip {name}: already present");
+                crate::progress!("skip {name}: already present");
                 let _ = e;
                 continue;
             }

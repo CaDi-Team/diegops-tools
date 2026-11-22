@@ -416,7 +416,7 @@ pub fn push(
             }
         }
 
-        eprintln!("\n{}", folder.dest);
+        crate::progress!("\n{}", folder.dest);
 
         if !dest.exists() {
             eprintln!(
@@ -446,7 +446,7 @@ pub fn push(
         };
 
         if file_names.is_empty() {
-            eprintln!("  SKIP  no files to push");
+            crate::progress!("  SKIP  no files to push");
             continue;
         }
 
@@ -484,7 +484,7 @@ pub fn push(
             let vault_value = vault_state.get(name).and_then(|v| v.as_str());
 
             if vault_value == Some(encoded.as_str()) {
-                eprintln!("  SKIP  {name} (unchanged)");
+                crate::progress!("  SKIP  {name} (unchanged)");
                 n_unchanged += 1;
             } else {
                 pairs.push((name.clone(), encoded));
@@ -504,7 +504,7 @@ pub fn push(
         // set (existing Vault keys + changed files), not just the changes.
         if crate::ui::flags().dry_run {
             for (name, _) in &pairs {
-                eprintln!("  WOULD PUSH  {name}");
+                crate::progress!("  WOULD PUSH  {name}");
                 n_pushed += 1;
             }
             continue;
@@ -523,7 +523,7 @@ pub fn push(
         ) {
             Ok(()) => {
                 for (name, _) in &pairs {
-                    eprintln!("  PUSH  {name}");
+                    crate::progress!("  PUSH  {name}");
                     n_pushed += 1;
                 }
             }
@@ -534,7 +534,7 @@ pub fn push(
         }
     }
 
-    eprintln!();
+    crate::progress!();
     println!(
         "{}: {n_pushed} {}, {n_unchanged} unchanged, {} failed",
         if crate::ui::flags().dry_run {
@@ -595,12 +595,12 @@ pub fn pull(
             }
         }
 
-        eprintln!("\n{}", folder.dest);
+        crate::progress!("\n{}", folder.dest);
 
         let dry = crate::ui::flags().dry_run;
         // Ensure destination directory exists
         if !dest.exists() && dry {
-            eprintln!("  WOULD CREATE directory {}", dest.display());
+            crate::progress!("  WOULD CREATE directory {}", dest.display());
         } else if !dest.exists() {
             let mode = match dir_mode(folder) {
                 Ok(m) => m,
@@ -695,15 +695,15 @@ pub fn pull(
                 use super::common::WritePlan;
                 match super::common::write_plan(&file_path, &content) {
                     WritePlan::Unchanged => {
-                        eprintln!("  SKIP  {key} (unchanged)");
+                        crate::progress!("  SKIP  {key} (unchanged)");
                         n_unchanged += 1;
                     }
                     WritePlan::Create => {
-                        eprintln!("  WOULD WRITE {key}");
+                        crate::progress!("  WOULD WRITE {key}");
                         n_written += 1;
                     }
                     WritePlan::Replace => {
-                        eprintln!("  WOULD WRITE {key} (current file kept as backup)");
+                        crate::progress!("  WOULD WRITE {key} (current file kept as backup)");
                         n_backed_up += 1;
                         n_written += 1;
                     }
@@ -714,16 +714,16 @@ pub fn pull(
             match super::common::write_file_with_backup(&file_path, &content) {
                 Ok(backed_up) => {
                     if backed_up {
-                        eprintln!("  WRITE {key} (backup created)");
+                        crate::progress!("  WRITE {key} (backup created)");
                         n_backed_up += 1;
                         n_written += 1;
                     } else if file_existed {
                         // File existed and content was identical — nothing written
-                        eprintln!("  SKIP  {key} (unchanged)");
+                        crate::progress!("  SKIP  {key} (unchanged)");
                         n_unchanged += 1;
                     } else {
                         // New file
-                        eprintln!("  WRITE {key}");
+                        crate::progress!("  WRITE {key}");
                         n_written += 1;
                     }
                     if let Err(e) = set_permissions(&file_path, *mode) {
@@ -743,7 +743,7 @@ pub fn pull(
         }
     }
 
-    eprintln!();
+    crate::progress!();
     println!(
         "{}: {n_written} {} ({n_backed_up} with backup), {n_unchanged} unchanged, {} failed",
         if crate::ui::flags().dry_run {
@@ -944,7 +944,7 @@ pub fn update(
 
     for (dest_path, filename) in &found {
         if is_agent_file_tracked(existing.as_ref(), dest_path, filename) {
-            eprintln!(
+            crate::progress!(
                 "  SKIP  {}/{filename} (already tracked)",
                 contract_home(dest_path)
             );
@@ -973,7 +973,7 @@ pub fn update(
             ));
         }
 
-        eprintln!(
+        crate::progress!(
             "  ADD   {dest_str}  ({})  →  {vault_path}",
             filenames.join(", ")
         );

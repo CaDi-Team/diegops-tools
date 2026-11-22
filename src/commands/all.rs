@@ -128,7 +128,7 @@ pub fn print_summary(results: &[StepResult]) -> usize {
     eprintln!("Summary:");
     for step in results {
         if step.ok {
-            eprintln!("  OK    {}", step.label);
+            crate::progress!("  OK    {}", step.label);
         } else {
             eprintln!("  FAIL  {}: {}", step.label, step.detail);
             failures += 1;

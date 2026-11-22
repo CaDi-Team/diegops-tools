@@ -211,11 +211,17 @@ fn gh_cli_token() -> Option<String> {
 pub fn load_gh_token_with_source(
 ) -> Result<Option<(String, GhTokenSource)>, Box<dyn std::error::Error>> {
     let stored = load_gh_token_from(&tokens_dir()?)?;
-    Ok(resolve_gh_token(
-        &|k| std::env::var(k).ok(),
-        stored,
-        &gh_cli_token,
-    ))
+    let r = resolve_gh_token(&|k| std::env::var(k).ok(), stored, &gh_cli_token);
+    crate::debug!(
+        "github token: {}",
+        match &r {
+            Some((_, GhTokenSource::Env(v))) => format!("${v}"),
+            Some((_, GhTokenSource::Stored)) => "stored (~/.diegops/tokens/gh.json)".into(),
+            Some((_, GhTokenSource::GhCli)) => "gh auth token".into(),
+            None => "none".into(),
+        }
+    );
+    Ok(r)
 }
 
 /// Loads the GitHub token (see [`resolve_gh_token`] for the order).
