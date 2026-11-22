@@ -232,3 +232,48 @@ fn tilde_secret_file_without_home_is_a_clear_error() {
     let err = client_secret(&cfg, &env_of(&[])).unwrap_err().to_string();
     assert!(err.contains("HOME is not set"), "{err}");
 }
+
+#[test]
+fn credential_source_follows_the_resolution_order() {
+    let mut cfg = parse(SAMPLE).unwrap();
+    let home = Path::new("/home/u");
+    let none = env_of(&[]);
+    // Infisical: token > env secret > command > file.
+    assert_eq!(
+        credential_source(&cfg, BackendKind::Infisical, &none, home),
+        "none"
+    );
+    cfg.infisical.client_secret_file = Some("~/s".into());
+    assert_eq!(
+        credential_source(&cfg, BackendKind::Infisical, &none, home),
+        "client_secret_file /home/u/s"
+    );
+    cfg.infisical.client_secret_command = Some(vec!["pass".into(), "x".into()]);
+    assert_eq!(
+        credential_source(&cfg, BackendKind::Infisical, &none, home),
+        "client_secret_command 'pass'"
+    );
+    let e = env_of(&[("INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET", "s")]);
+    assert_eq!(
+        credential_source(&cfg, BackendKind::Infisical, &e, home),
+        "$INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET"
+    );
+    let e = env_of(&[
+        ("INFISICAL_TOKEN", "t"),
+        ("INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET", "s"),
+    ]);
+    assert_eq!(
+        credential_source(&cfg, BackendKind::Infisical, &e, home),
+        "$INFISICAL_TOKEN"
+    );
+    // Vault: env > token file (default ~/.vault-token).
+    assert_eq!(
+        credential_source(&cfg, BackendKind::Vault, &none, home),
+        "token file /home/u/.vault-token"
+    );
+    let e = env_of(&[("VAULT_TOKEN", "t")]);
+    assert_eq!(
+        credential_source(&cfg, BackendKind::Vault, &e, home),
+        "$VAULT_TOKEN"
+    );
+}

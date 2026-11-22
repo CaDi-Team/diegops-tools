@@ -231,6 +231,45 @@ pub fn resolve_vault(
     })
 }
 
+/// Where the backend credential comes from, mirroring [`resolve_infisical`]
+/// and [`resolve_vault`] (ADR 0001 D6). Never returns the secret itself.
+pub fn credential_source(
+    cfg: &Config,
+    kind: BackendKind,
+    env: &dyn Fn(&str) -> Option<String>,
+    home: &Path,
+) -> String {
+    match kind {
+        BackendKind::Infisical => {
+            let c = &cfg.infisical;
+            if non_empty(env("INFISICAL_TOKEN")).is_some() {
+                "$INFISICAL_TOKEN".into()
+            } else if non_empty(env("INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET")).is_some() {
+                "$INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET".into()
+            } else if let Some(cmd) = c.client_secret_command.as_ref().filter(|c| !c.is_empty()) {
+                format!("client_secret_command '{}'", cmd[0])
+            } else if let Some(f) = c.client_secret_file.as_deref() {
+                format!("client_secret_file {}", expand(f, home).display())
+            } else {
+                "none".into()
+            }
+        }
+        BackendKind::Vault => {
+            if non_empty(env("VAULT_TOKEN")).is_some() {
+                "$VAULT_TOKEN".into()
+            } else {
+                let file = cfg
+                    .vault
+                    .token_file
+                    .as_deref()
+                    .map(|p| expand(p, home))
+                    .unwrap_or_else(|| home.join(".vault-token"));
+                format!("token file {}", file.display())
+            }
+        }
+    }
+}
+
 /// Resolves Infisical settings (env `INFISICAL_*` overrides the file).
 pub fn resolve_infisical(
     cfg: &Config,

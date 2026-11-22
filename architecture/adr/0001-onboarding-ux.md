@@ -84,6 +84,12 @@ Defined once on the root command, `global = true`, with the same meaning everywh
 - Existing 0600 files keep working; migration to the keyring is offered, never forced.
 - Gate: if the keyring crate breaks musl or Windows-gnu cross builds, ship the file store only and record it as an amendment to this ADR.
 
+**Amendment (2026-11-22): file store only.** The gate failed. Evidence (spike PR #77, closed): `keyring` 4.2 builds for musl x86_64/aarch64 and windows-gnu, but (1) macOS x86_64/aarch64 fail to link under zigbuild (`unable to find framework 'Security'`: no Apple SDK) and (2) the required RustSec check fails on its Linux deps `zbus_names`, `zvariant`, `zvariant_derive` (unmaintained: RUSTSEC-2026-0370/0371/0372). So:
+- Chain stays env var → private file (client secret `command` → `client_secret_file` for Infisical; `~/.diegops/tokens/gh.json` → `gh auth token` for GitHub; `~/.vault-token` for Vault).
+- No `--credential-store` flag: with one store it would be a no-op (D3 rule). An env var already overrides the file.
+- `doctor` reports the source of every credential (never the value) and warns when a credential file is not 0600.
+- Revisit the keyring when macOS is built on a native runner and the zbus stack passes `cargo audit`; the CI cross-build job (#76) is the gate.
+
 ### D7 — Config layout (#52)
 - Keep both locations (no move): `~/.config/diegops/config.toml` = how diegops connects (backend, credentials refs); `~/.diegops/*.yaml` = what diegops manages (repos, env, files, agents), synced by `diegops sync`.
 - Add `diegops config path` (prints every resolved path and which rule chose it) and document the split in README and `explain config`.

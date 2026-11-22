@@ -74,7 +74,7 @@ pub struct TokenData {
 // ---------------------------------------------------------------------------
 
 /// Returns the tokens directory: `~/.diegops/tokens/`.
-fn tokens_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
+pub fn tokens_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
     Ok(super::common::diegops_dir()?.join("tokens"))
 }
 
@@ -174,6 +174,17 @@ pub enum GhTokenSource {
     GhCli,
 }
 
+impl GhTokenSource {
+    /// Human label for `doctor` / `--verbose` (never the token).
+    pub fn label(&self) -> String {
+        match self {
+            Self::Env(v) => format!("${v}"),
+            Self::Stored => "stored (~/.diegops/tokens/gh.json)".into(),
+            Self::GhCli => "gh auth token".into(),
+        }
+    }
+}
+
 /// ADR 0001 D2: `$GITHUB_TOKEN` > `$GH_TOKEN` > stored token > `gh auth token`.
 /// `gh` is only asked when nothing else is set (it is a subprocess).
 pub fn resolve_gh_token(
@@ -214,12 +225,9 @@ pub fn load_gh_token_with_source(
     let r = resolve_gh_token(&|k| std::env::var(k).ok(), stored, &gh_cli_token);
     crate::debug!(
         "github token: {}",
-        match &r {
-            Some((_, GhTokenSource::Env(v))) => format!("${v}"),
-            Some((_, GhTokenSource::Stored)) => "stored (~/.diegops/tokens/gh.json)".into(),
-            Some((_, GhTokenSource::GhCli)) => "gh auth token".into(),
-            None => "none".into(),
-        }
+        r.as_ref()
+            .map(|(_, s)| s.label())
+            .unwrap_or_else(|| "none".into())
     );
     Ok(r)
 }
