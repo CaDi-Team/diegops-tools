@@ -242,13 +242,10 @@ pub fn apply(
                     crate::progress!("  SKIP  .env unchanged");
                     n_skipped += 1;
                 } else if backed_up {
-                    crate::progress!(
-                        "  WRITE .env ({} secrets, backup created)",
-                        all_secrets.len()
-                    );
+                    crate::progress!("  WRITE .env (backup created)");
                     n_written += 1;
                 } else {
-                    crate::progress!("  WRITE .env ({} secrets)", all_secrets.len());
+                    crate::progress!("  WRITE .env");
                     n_written += 1;
                 }
             }
