@@ -787,13 +787,32 @@ pub fn status(config_path: Option<&Path>) -> Result<(), Box<dyn std::error::Erro
     let backend = crate::secrets_backend::open(None)?;
 
     let config = load_config(config_path)?;
+    let json = crate::ui::flags().json;
+    let mut report: Vec<serde_json::Value> = Vec::new();
 
     for folder in &config.folders {
         let dest = super::common::expand_home(&folder.dest);
-        println!("\n{}", folder.dest);
+        let mut files: Vec<serde_json::Value> = Vec::new();
+        let mut line = |state: &str, name: &str, note: &str| {
+            if json {
+                files.push(serde_json::json!({ "name": name, "state": state.to_lowercase() }));
+            } else {
+                println!("  {state:<11} {name}{note}");
+            }
+        };
+        if !json {
+            println!("\n{}", folder.dest);
+        }
 
         if !dest.exists() {
-            println!("  MISSING  (directory does not exist)");
+            if json {
+                report.push(serde_json::json!({
+                    "dest": folder.dest, "vault_path": folder.vault_path,
+                    "exists": false, "files": [], "error": null,
+                }));
+            } else {
+                println!("  MISSING  (directory does not exist)");
+            }
             continue;
         }
 
@@ -802,6 +821,12 @@ pub fn status(config_path: Option<&Path>) -> Result<(), Box<dyn std::error::Erro
             Ok(map) => map,
             Err(e) => {
                 eprintln!("  FAIL  {e}");
+                if json {
+                    report.push(serde_json::json!({
+                        "dest": folder.dest, "vault_path": folder.vault_path,
+                        "exists": true, "files": [], "error": e.to_string(),
+                    }));
+                }
                 continue;
             }
         };
@@ -820,6 +845,12 @@ pub fn status(config_path: Option<&Path>) -> Result<(), Box<dyn std::error::Erro
                     }
                     Err(e) => {
                         eprintln!("  FAIL  could not list local files: {e}");
+                        if json {
+                            report.push(serde_json::json!({
+                                "dest": folder.dest, "vault_path": folder.vault_path,
+                                "exists": true, "files": [], "error": format!("could not list local files: {e}"),
+                            }));
+                        }
                         continue;
                     }
                 }
@@ -829,6 +860,12 @@ pub fn status(config_path: Option<&Path>) -> Result<(), Box<dyn std::error::Erro
             }
             KeySelector::All(_) => {
                 eprintln!("  FAIL  invalid key selector (expected \"*\")");
+                if json {
+                    report.push(serde_json::json!({
+                        "dest": folder.dest, "vault_path": folder.vault_path,
+                        "exists": true, "files": [], "error": "invalid key selector (expected \"*\")",
+                    }));
+                }
                 continue;
             }
             KeySelector::List(entries) => {
@@ -846,39 +883,49 @@ pub fn status(config_path: Option<&Path>) -> Result<(), Box<dyn std::error::Erro
             match (local_exists, vault_value) {
                 (false, None) => {
                     // Should not happen given union logic, but be safe
-                    println!("  ?           {name}");
+                    line("UNKNOWN", name, "");
                 }
                 (true, None) => {
-                    println!("  LOCAL_ONLY  {name}");
+                    line("LOCAL_ONLY", name, "");
                 }
                 (false, Some(_)) => {
-                    println!("  VAULT_ONLY  {name}");
+                    line("VAULT_ONLY", name, "");
                 }
                 (true, Some(encoded)) => {
                     let local_content = match fs::read(&local_path) {
                         Ok(b) => b,
                         Err(e) => {
                             eprintln!("  FAIL        could not read '{name}': {e}");
+                            line("UNREADABLE", name, "");
                             continue;
                         }
                     };
                     let decoded = match base64_decode(encoded) {
                         Ok(b) => b,
                         Err(_) => {
-                            println!("  DIFFERS     {name} (vault value not base64)");
+                            line("DIFFERS", name, " (vault value not base64)");
                             continue;
                         }
                     };
                     if local_content == decoded {
-                        println!("  SYNCED      {name}");
+                        line("SYNCED", name, "");
                     } else {
-                        println!("  DIFFERS     {name}");
+                        line("DIFFERS", name, "");
                     }
                 }
             }
         }
+        if json {
+            report.push(serde_json::json!({
+                "dest": folder.dest, "vault_path": folder.vault_path,
+                "exists": true, "files": files, "error": null,
+            }));
+        }
     }
 
+    if json {
+        crate::ui::print_json(&serde_json::json!({ "folders": report }))?;
+    }
     Ok(())
 }
 

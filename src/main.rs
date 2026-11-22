@@ -53,6 +53,9 @@ pub(crate) struct Cli {
     /// Explain where config, backend and credentials come from
     #[arg(short = 'v', long, global = true)]
     verbose: bool,
+    /// Machine-readable output (read commands only; schema in the README)
+    #[arg(long, global = true)]
+    json: bool,
     /// Secrets backend: infisical | vault (alias openbao). Overrides $DIEGOPS_SECRETS_BACKEND
     #[arg(long, global = true, value_name = "NAME")]
     backend: Option<String>,
@@ -72,9 +75,6 @@ enum Commands {
         Exits 1 if any ✗. Nothing is changed."
     )]
     Doctor {
-        /// Print the result as JSON
-        #[arg(long)]
-        json: bool,
         /// Do not contact the backend or GitHub
         #[arg(long)]
         offline: bool,
@@ -382,7 +382,15 @@ fn command_path(m: &clap::ArgMatches) -> String {
     let mut parts = Vec::new();
     let mut cur = m;
     while let Some((name, sub)) = cur.subcommand() {
-        parts.push(name.to_string());
+        // Renamed commands (#48) share the rules of their new names.
+        parts.push(
+            match (parts.is_empty(), name) {
+                (true, "vault") => "env",
+                (true, "secrets") => "files",
+                _ => name,
+            }
+            .to_string(),
+        );
         cur = sub;
     }
     parts.join(" ")
@@ -411,8 +419,24 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         dry_run,
         quiet: cli.quiet,
         verbose: cli.verbose,
+        json: cli.json,
     });
-    if let Err(msg) = ui::check_dry_run(dry_run, &command_path(&matches)) {
+    let path = command_path(&matches);
+    let json_key = matches!(
+        &cli.command,
+        Some(Commands::Kv {
+            cmd: commands::kv::KvCommand::Get { key: Some(_), .. }
+        })
+    );
+    if cli.json && json_key {
+        eprintln!("error: --json lists key names only; it never prints a value\n  hint: drop the KEY argument, or drop --json to read the value");
+        std::process::exit(2);
+    }
+    if let Err(msg) = ui::check_json(cli.json, &path) {
+        eprintln!("{msg}");
+        std::process::exit(2);
+    }
+    if let Err(msg) = ui::check_dry_run(dry_run, &path) {
         eprintln!("{msg}");
         std::process::exit(2);
     }
@@ -426,8 +450,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         std::env::set_var("DIEGOPS_SECRETS_BACKEND", b);
     }
     match cli.command {
-        Some(Commands::Doctor { json, offline }) => {
-            commands::doctor::run(json, offline)?;
+        Some(Commands::Doctor { offline }) => {
+            commands::doctor::run(ui::flags().json, offline)?;
         }
         Some(Commands::Explain { term }) => {
             let t = term.join(" ");

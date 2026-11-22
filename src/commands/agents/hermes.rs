@@ -714,9 +714,14 @@ pub fn secrets_push(reg: &Registry, only: Option<&str>) -> Result<(), BoxError> 
 /// `diegops agents hermes status`.
 pub fn status(reg: &Registry) -> Result<(), BoxError> {
     let ctx = Ctx::from_registry(reg)?;
-    println!("hermes root: {}", ctx.root.display());
-    println!("backup repo: {}", ctx.repo.display());
-    print_run(&support::RunState::load()?, "hermes");
+    let json = crate::ui::flags().json;
+    let state = support::RunState::load()?;
+    if !json {
+        println!("hermes root: {}", ctx.root.display());
+        println!("backup repo: {}", ctx.repo.display());
+        print_run(&state, "hermes");
+    }
+    let mut rows = Vec::new();
     for p in profiles(&ctx.root)? {
         let saved = ctx.repo_profile(&p.name);
         let mut def_pending = 0;
@@ -731,6 +736,15 @@ pub fn status(reg: &Registry) -> Result<(), BoxError> {
                 mem_pending += 1;
             }
         }
+        if json {
+            rows.push(serde_json::json!({
+                "name": p.name,
+                "backed_up": saved.is_dir(),
+                "definition_changes": def_pending,
+                "memories_to_review": mem_pending,
+            }));
+            continue;
+        }
         println!(
             "  {:<16} {}  definition changes: {def_pending}  memories to review: {mem_pending}",
             p.name,
@@ -740,6 +754,14 @@ pub fn status(reg: &Registry) -> Result<(), BoxError> {
                 "NOT BACKED"
             }
         );
+    }
+    if json {
+        crate::ui::print_json(&serde_json::json!({
+            "root": ctx.root,
+            "repo": ctx.repo,
+            "last_run": state.agents.get("hermes"),
+            "profiles": rows,
+        }))?;
     }
     Ok(())
 }

@@ -79,6 +79,13 @@ pub fn run(cmd: KvCommand, backend: Option<&str>) -> Result<(), BoxError> {
                         .ok_or_else(|| format!("no key '{k}' at '{path}'"))?;
                     std::io::stdout().write_all(v.as_bytes())?;
                 }
+                None if crate::ui::flags().json => {
+                    crate::ui::print_json(&serde_json::json!({
+                        "backend": b.name(),
+                        "path": path,
+                        "keys": data.keys().collect::<Vec<_>>(),
+                    }))?;
+                }
                 None => {
                     for k in data.keys() {
                         println!("{k}");
@@ -93,7 +100,15 @@ pub fn run(cmd: KvCommand, backend: Option<&str>) -> Result<(), BoxError> {
                 return Ok(());
             }
             let b = secrets_backend::open(backend)?;
-            for e in b.list(&path)? {
+            let entries = b.list(&path)?;
+            if crate::ui::flags().json {
+                return crate::ui::print_json(&serde_json::json!({
+                    "backend": b.name(),
+                    "path": path,
+                    "entries": entries,
+                }));
+            }
+            for e in entries {
                 println!("{e}");
             }
         }

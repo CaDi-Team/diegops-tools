@@ -170,8 +170,54 @@ pub fn apply(
 /// Prints repos from the config that are currently cloned locally (have a `.git` dir).
 ///
 /// Output goes to stdout so it can be piped. Summary count goes to stderr.
+/// `--json` shape of `repo list` / `repo list-diff`.
+#[derive(serde::Serialize)]
+struct RepoReport<'a> {
+    targets: Vec<RepoTarget<'a>>,
+    total: usize,
+}
+
+#[derive(serde::Serialize)]
+struct RepoTarget<'a> {
+    path: &'a str,
+    repos: Vec<RepoEntry<'a>>,
+}
+
+#[derive(serde::Serialize)]
+struct RepoEntry<'a> {
+    name: &'a str,
+    url: &'a str,
+}
+
+/// Repos per target that are (`cloned = true`) or are not yet cloned.
+fn repo_report(config: &ReposConfig, cloned: bool) -> RepoReport<'_> {
+    let mut targets = Vec::new();
+    for target in &config.targets {
+        let dest = super::common::expand_home(&target.path);
+        let repos: Vec<RepoEntry> = target
+            .repos
+            .iter()
+            .filter_map(|url| {
+                let name = repo_name(url)?;
+                (dest.join(name).join(".git").exists() == cloned).then_some(RepoEntry { name, url })
+            })
+            .collect();
+        if !repos.is_empty() {
+            targets.push(RepoTarget {
+                path: &target.path,
+                repos,
+            });
+        }
+    }
+    let total = targets.iter().map(|t| t.repos.len()).sum();
+    RepoReport { targets, total }
+}
+
 pub fn list(config_path: Option<&Path>) -> Result<(), Box<dyn std::error::Error>> {
     let config = load_config(config_path)?;
+    if crate::ui::flags().json {
+        return crate::ui::print_json(&repo_report(&config, true));
+    }
     let mut total: usize = 0;
 
     for target in &config.targets {
@@ -208,6 +254,9 @@ pub fn list(config_path: Option<&Path>) -> Result<(), Box<dyn std::error::Error>
 /// Output goes to stdout so it can be piped. Summary and hints go to stderr.
 pub fn list_diff(config_path: Option<&Path>) -> Result<(), Box<dyn std::error::Error>> {
     let config = load_config(config_path)?;
+    if crate::ui::flags().json {
+        return crate::ui::print_json(&repo_report(&config, false));
+    }
     let mut total: usize = 0;
 
     for target in &config.targets {

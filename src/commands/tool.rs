@@ -698,6 +698,20 @@ pub fn list() -> Result<(), Box<dyn std::error::Error>> {
             ]
         })
         .collect();
+    if crate::ui::flags().json {
+        let tools: Vec<_> = rows
+            .iter()
+            .map(|[name, description, version, status]| {
+                serde_json::json!({
+                    "name": name,
+                    "description": description,
+                    "installed": status == "installed",
+                    "version": (status == "installed").then_some(version),
+                })
+            })
+            .collect();
+        return crate::ui::print_json(&serde_json::json!({ "tools": tools }));
+    }
     print!("{}", table(&rows));
     Ok(())
 }
