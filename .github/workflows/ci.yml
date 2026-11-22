@@ -107,3 +107,50 @@ jobs:
       - name: cargo audit
         if: env.RUN == 'true'
         run: cargo audit --deny warnings
+
+  # Release targets built the same way as cd.yml, on every code PR, so a
+  # dependency that breaks musl/macOS/Windows is caught before the tag
+  # (ADR 0001 D6 gate). Not a required check: informative, non-blocking.
+  cross:
+    name: Cross-build ${{ matrix.target }}
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: ""
+      ZIG_VERSION: "0.13.0"
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - x86_64-unknown-linux-musl
+          - aarch64-unknown-linux-musl
+          - x86_64-apple-darwin
+          - aarch64-apple-darwin
+          - x86_64-pc-windows-gnu
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Cache Cargo
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin/cargo-zigbuild
+          key: cross-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: cross-${{ matrix.target }}-
+      - name: Install Zig + cargo-zigbuild
+        run: |
+          ZIG="zig-linux-x86_64-${ZIG_VERSION}"
+          curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/${ZIG}.tar.xz" | tar -xJ -C /tmp
+          sudo mv "/tmp/${ZIG}" /opt/zig
+          sudo ln -sf /opt/zig/zig /usr/local/bin/zig
+          command -v cargo-zigbuild || cargo install cargo-zigbuild --locked
+      - name: Build
+        run: cargo zigbuild --locked --release --target ${{ matrix.target }}
+      - name: Binary size
+        run: ls -l target/${{ matrix.target }}/release/diegops* | grep -v '\.d$'
