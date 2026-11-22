@@ -645,6 +645,8 @@ targets:
 
 Stores a GitHub token in `~/.diegops/tokens/gh.json` (mode 0600). Resolution (since v1.8, ADR 0001): `$GITHUB_TOKEN` > `$GH_TOKEN` > stored token > `gh auth token`. `auth status` also shows the ktool kenv status.
 
+**Preview before writing (since v1.8):** `-n/--dry-run` is global and supported by `shell init`, `kv migrate`, `env apply`, `files pull`, `files push` and `agents hermes restore`; it reads the backends, prints what would change (never values) and writes nothing. Other commands reject it with exit 2.
+
 ### `diegops sync`
 
 The first `push` creates a private repo named `diegops-<github-user>-memory`. With `DIEGOPS_PROFILE=work` it uses `diegops-<github-user>-work-memory` instead. It syncs `~/.diegops/` except `tokens/` and `bin/`. `push` overwrites the cloud copy and `pull` overwrites the local one.
