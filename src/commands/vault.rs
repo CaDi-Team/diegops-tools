@@ -220,18 +220,17 @@ pub fn apply(
         let env_content = build_env_content(&all_secrets);
         if crate::ui::flags().dry_run {
             use super::common::WritePlan;
-            let n = all_secrets.len();
             match super::common::write_plan(&dest.join(".env"), env_content.as_bytes()) {
                 WritePlan::Unchanged => {
                     eprintln!("  SKIP  .env unchanged");
                     n_skipped += 1;
                 }
                 WritePlan::Create => {
-                    eprintln!("  WOULD WRITE .env ({n} secrets, new file)");
+                    eprintln!("  WOULD WRITE .env (new file)");
                     n_written += 1;
                 }
                 WritePlan::Replace => {
-                    eprintln!("  WOULD WRITE .env ({n} secrets, current file kept as .env.bak)");
+                    eprintln!("  WOULD WRITE .env (current file kept as .env.bak)");
                     n_written += 1;
                 }
             }
