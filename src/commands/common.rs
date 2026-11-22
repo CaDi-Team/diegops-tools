@@ -145,6 +145,25 @@ pub fn kv_get(
 /// Writes `content` to `path`, creating a `.bak` backup if the file already
 /// exists and its content differs.
 ///
+/// What [`write_file_with_backup`] would do, without touching the disk
+/// (`--dry-run`).
+#[derive(Debug, PartialEq, Eq)]
+pub enum WritePlan {
+    Create,
+    Unchanged,
+    /// Differs: would be overwritten and a `.bak` kept.
+    Replace,
+}
+
+pub fn write_plan(path: &Path, content: &[u8]) -> WritePlan {
+    match fs::read(path) {
+        Ok(old) if old == content => WritePlan::Unchanged,
+        Ok(_) => WritePlan::Replace,
+        Err(_) if path.exists() => WritePlan::Replace,
+        Err(_) => WritePlan::Create,
+    }
+}
+
 /// Returns `true` if a backup was created (i.e. the file existed and differed),
 /// `false` otherwise (new file, or content identical).
 pub fn write_file_with_backup(
@@ -173,6 +192,32 @@ pub fn write_file_with_backup(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn write_plan_reports_without_writing() {
+        let dir = std::env::temp_dir().join(format!("diegops-plan-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let f = dir.join(".env");
+        assert_eq!(super::write_plan(&f, b"A=1\n"), super::WritePlan::Create);
+        std::fs::write(&f, b"A=1\n").unwrap();
+        assert_eq!(super::write_plan(&f, b"A=1\n"), super::WritePlan::Unchanged);
+        assert_eq!(super::write_plan(&f, b"A=2\n"), super::WritePlan::Replace);
+        assert_eq!(std::fs::read(&f).unwrap(), b"A=1\n");
+        assert!(!dir.join(".env.bak").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn dry_run_is_supported_by_every_command_that_writes_user_files() {
+        for c in [
+            "env apply",
+            "files pull",
+            "files push",
+            "agents hermes restore",
+        ] {
+            assert!(crate::ui::check_dry_run(true, c).is_ok(), "{c}");
+        }
+    }
+
     #[test]
     fn missing_config_hint_names_the_init_command() {
         let cases = [

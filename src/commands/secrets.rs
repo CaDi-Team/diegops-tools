@@ -502,6 +502,13 @@ pub fn push(
 
         // `vault kv put` replaces the whole secret, so write the full merged
         // set (existing Vault keys + changed files), not just the changes.
+        if crate::ui::flags().dry_run {
+            for (name, _) in &pairs {
+                eprintln!("  WOULD PUSH  {name}");
+                n_pushed += 1;
+            }
+            continue;
+        }
         let merged = merge_for_put(&vault_state, &pairs);
         let kv_pairs: Vec<(&str, &str)> = merged
             .iter()
@@ -529,7 +536,17 @@ pub fn push(
 
     eprintln!();
     println!(
-        "Done: {n_pushed} pushed, {n_unchanged} unchanged, {} failed",
+        "{}: {n_pushed} {}, {n_unchanged} unchanged, {} failed",
+        if crate::ui::flags().dry_run {
+            "Dry run, nothing changed"
+        } else {
+            "Done"
+        },
+        if crate::ui::flags().dry_run {
+            "would be pushed"
+        } else {
+            "pushed"
+        },
         failures.len()
     );
 
@@ -580,8 +597,11 @@ pub fn pull(
 
         eprintln!("\n{}", folder.dest);
 
+        let dry = crate::ui::flags().dry_run;
         // Ensure destination directory exists
-        if !dest.exists() {
+        if !dest.exists() && dry {
+            eprintln!("  WOULD CREATE directory {}", dest.display());
+        } else if !dest.exists() {
             let mode = match dir_mode(folder) {
                 Ok(m) => m,
                 Err(e) => {
@@ -671,6 +691,25 @@ pub fn pull(
             };
 
             let file_path = dest.join(key);
+            if dry {
+                use super::common::WritePlan;
+                match super::common::write_plan(&file_path, &content) {
+                    WritePlan::Unchanged => {
+                        eprintln!("  SKIP  {key} (unchanged)");
+                        n_unchanged += 1;
+                    }
+                    WritePlan::Create => {
+                        eprintln!("  WOULD WRITE {key}");
+                        n_written += 1;
+                    }
+                    WritePlan::Replace => {
+                        eprintln!("  WOULD WRITE {key} (current file kept as backup)");
+                        n_backed_up += 1;
+                        n_written += 1;
+                    }
+                }
+                continue;
+            }
             let file_existed = file_path.exists();
             match super::common::write_file_with_backup(&file_path, &content) {
                 Ok(backed_up) => {
@@ -706,7 +745,17 @@ pub fn pull(
 
     eprintln!();
     println!(
-        "Done: {n_written} written ({n_backed_up} backed up), {n_unchanged} unchanged, {} failed",
+        "{}: {n_written} {} ({n_backed_up} with backup), {n_unchanged} unchanged, {} failed",
+        if crate::ui::flags().dry_run {
+            "Dry run, nothing changed"
+        } else {
+            "Done"
+        },
+        if crate::ui::flags().dry_run {
+            "would be written"
+        } else {
+            "written"
+        },
         failures.len()
     );
 

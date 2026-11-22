@@ -218,6 +218,24 @@ pub fn apply(
         // Build .env content and write it (backing up an existing, differing
         // file first — matches secrets.rs's write_file_with_backup behavior).
         let env_content = build_env_content(&all_secrets);
+        if crate::ui::flags().dry_run {
+            use super::common::WritePlan;
+            match super::common::write_plan(&dest.join(".env"), env_content.as_bytes()) {
+                WritePlan::Unchanged => {
+                    eprintln!("  SKIP  .env unchanged");
+                    n_skipped += 1;
+                }
+                WritePlan::Create => {
+                    eprintln!("  WOULD WRITE .env (new file)");
+                    n_written += 1;
+                }
+                WritePlan::Replace => {
+                    eprintln!("  WOULD WRITE .env (current file kept as .env.bak)");
+                    n_written += 1;
+                }
+            }
+            continue;
+        }
         match write_env_file(&dest, &env_content) {
             Ok((written, backed_up)) => {
                 if !written {
@@ -243,10 +261,17 @@ pub fn apply(
     }
 
     eprintln!();
-    println!(
-        "Done: {n_written} written, {n_skipped} unchanged, {} failed",
-        failures.len()
-    );
+    if crate::ui::flags().dry_run {
+        println!(
+            "Dry run: {n_written} would be written, {n_skipped} unchanged, {} failed. Nothing was changed.",
+            failures.len()
+        );
+    } else {
+        println!(
+            "Done: {n_written} written, {n_skipped} unchanged, {} failed",
+            failures.len()
+        );
+    }
 
     if !failures.is_empty() {
         eprintln!("\nFailed targets:");

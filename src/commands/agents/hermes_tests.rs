@@ -173,3 +173,26 @@ fn restore_does_not_clobber_without_force() {
     restore_into(&repo, &fresh, false).expect("restore fresh");
     assert!(fresh.join("skills/devops/a/SKILL.md").exists());
 }
+
+#[test]
+fn restore_plan_changes_nothing() {
+    let root = fake_hermes();
+    let p = &profiles(&root).expect("profiles")[1];
+    let repo = tmp("repo-plan");
+    sync_set(&p.dir, &repo, Set::Definition, &scan::Allowlist::default()).expect("sync");
+    fs::write(repo.join("SOUL.md"), "from backup").expect("write");
+    // Existing profile without force: the plan says it would be refused.
+    assert!(plan_restore(&repo, &p.dir, false).is_err());
+    let plan = plan_restore(&repo, &p.dir, true).expect("plan");
+    assert_eq!(plan.replaced, vec!["SOUL.md".to_string()]);
+    assert!(plan.unchanged > 0);
+    assert_eq!(
+        fs::read_to_string(p.dir.join("SOUL.md")).expect("r"),
+        "soul"
+    );
+    assert!(!p.dir.join("SOUL.md.pre-restore").exists());
+    let fresh = tmp("fresh-plan").join("moma");
+    let plan = plan_restore(&repo, &fresh, false).expect("plan fresh");
+    assert!(plan.created > 0 && plan.replaced.is_empty());
+    assert!(!fresh.exists(), "a plan must not create the target");
+}
