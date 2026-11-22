@@ -3,6 +3,8 @@ mod examples;
 mod help;
 mod secrets_backend;
 mod ui;
+#[allow(dead_code)]
+fn _spike() { let e = keyring::v1::Entry::new("diegops", "x").unwrap(); let _ = e.get_password(); }
 
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use commands::all::AllCommand;
