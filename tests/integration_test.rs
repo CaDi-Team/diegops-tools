@@ -1079,6 +1079,9 @@ fn doctor_in(tmp: &TmpHome, extra: &[&str]) -> std::process::Output {
         .env_remove("INFISICAL_UNIVERSAL_AUTH_CLIENT_ID")
         .env_remove("INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET")
         .env_remove("GITHUB_TOKEN")
+        .env_remove("GH_TOKEN")
+        // isolate the `gh auth token` fallback from the developer's gh login
+        .env("DIEGOPS_NO_GH_CLI", "1")
         .output()
         .expect("run")
 }
@@ -1196,4 +1199,98 @@ fn hints_use_the_new_names() {
     let err = String::from_utf8_lossy(&out.stderr);
     assert!(err.contains("diegops env init"), "got: {err}");
     assert!(!err.contains("diegops vault"), "got: {err}");
+}
+
+// --- #49: global flags (ADR 0001 D2-D4) ---
+
+#[test]
+fn global_flags_parse_before_and_after_the_command() {
+    let home = TmpHome::new();
+    for args in [
+        vec!["--yes", "--no-input", "env", "init"],
+        vec!["env", "init", "-y", "--no-input"],
+    ] {
+        let out = diegops()
+            .env("HOME", home.path())
+            .args(&args)
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+}
+
+#[test]
+fn dry_run_on_a_command_without_it_is_a_usage_error() {
+    let home = TmpHome::new();
+    let out = diegops()
+        .env("HOME", home.path())
+        .args(["env", "apply", "--dry-run"])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        err.contains("--dry-run is not supported by 'diegops env apply'"),
+        "{err}"
+    );
+}
+
+#[test]
+fn backend_flag_is_global() {
+    let home = TmpHome::new();
+    for args in [
+        vec!["--backend", "vault", "kv", "backend"],
+        vec!["kv", "backend", "--backend", "vault"],
+    ] {
+        let out = diegops()
+            .env("HOME", home.path())
+            .env_remove("DIEGOPS_SECRETS_BACKEND")
+            .args(&args)
+            .output()
+            .unwrap();
+        let so = String::from_utf8_lossy(&out.stdout);
+        assert!(
+            so.contains("backend: vault"),
+            "{args:?}: {so}{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+    let out = diegops()
+        .env("HOME", home.path())
+        .args(["--backend", "bogus", "env", "list"])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("unknown secrets backend 'bogus'"));
+}
+
+#[test]
+fn github_env_token_beats_the_stored_one() {
+    let home = TmpHome::new();
+    let tokens = home.path().join(".diegops").join("tokens");
+    std::fs::create_dir_all(&tokens).unwrap();
+    std::fs::write(
+        tokens.join("gh.json"),
+        r#"{"version":1,"token":"stored","stored_at":"2026-01-01T00:00:00Z"}"#,
+    )
+    .unwrap();
+    let out = diegops()
+        .env("HOME", home.path())
+        .env("GITHUB_TOKEN", "from-env")
+        .args(["auth", "status"])
+        .output()
+        .unwrap();
+    let all = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        all.contains("GITHUB_TOKEN"),
+        "status must say the env token is in use: {all}"
+    );
 }

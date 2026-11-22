@@ -23,14 +23,7 @@ pub enum ShellCommand {
         Run with --dry-run first to see exactly what would happen. In a terminal it asks\n\
         before using sudo or chsh; --yes skips the questions."
     )]
-    Init {
-        /// Print what would be done and change nothing
-        #[arg(short = 'n', long)]
-        dry_run: bool,
-        /// Do not ask before installing packages or changing the login shell
-        #[arg(short, long)]
-        yes: bool,
-    },
+    Init,
 }
 
 const ZSH_CONFIG: &str = "\
@@ -227,19 +220,13 @@ pub fn plan(home: &Path) -> Vec<String> {
     out
 }
 
-/// Asks a yes/no question on the terminal; default yes. Non-interactive → yes.
-fn confirm(question: &str, assume_yes: bool) -> bool {
-    use std::io::{BufRead, IsTerminal, Write};
-    if assume_yes || !std::io::stdin().is_terminal() {
-        return true;
+/// Asks before sudo/chsh (ADR 0001 D3): `--yes` proceeds, a terminal asks,
+/// no terminal refuses with a hint instead of assuming yes.
+fn confirm(question: &str, assume_yes: bool) -> Result<bool, Box<dyn std::error::Error>> {
+    if assume_yes {
+        return Ok(true);
     }
-    eprint!("\n  {question} [Y/n] ");
-    let _ = std::io::stderr().flush();
-    let mut answer = String::new();
-    if std::io::stdin().lock().read_line(&mut answer).is_err() {
-        return false;
-    }
-    !matches!(answer.trim().to_lowercase().as_str(), "n" | "no")
+    crate::ui::confirm(question)
 }
 
 pub fn init(dry_run: bool, yes: bool) -> Result<(), Box<dyn std::error::Error>> {
@@ -295,7 +282,7 @@ fn ensure_zsh(yes: bool) -> Result<(), Box<dyn std::error::Error>> {
     let cmds = zsh_install_cmds()
         .ok_or("zsh not found and no supported package manager detected. Install zsh manually.")?;
     let shown: Vec<String> = cmds.iter().map(|c| c.join(" ")).collect();
-    if !confirm(&format!("Install zsh with: {}?", shown.join(" && ")), yes) {
+    if !confirm(&format!("Install zsh with: {}?", shown.join(" && ")), yes)? {
         return Err(
             "zsh install cancelled\n  hint: install zsh yourself, then rerun 'diegops shell init'"
                 .into(),
@@ -317,12 +304,21 @@ fn ensure_default_shell(yes: bool) {
     }
 
     let zsh_path = which("zsh").unwrap_or_else(|| "/usr/bin/zsh".to_string());
-    if !confirm(
+    match confirm(
         &format!("Make zsh your login shell (chsh -s {zsh_path})?"),
         yes,
     ) {
-        eprintln!("SKIP (kept {current_shell})");
-        return;
+        Ok(true) => {}
+        Ok(false) => {
+            eprintln!("SKIP (kept {current_shell})");
+            return;
+        }
+        Err(_) => {
+            eprintln!(
+                "SKIP (kept {current_shell}; no terminal to confirm, pass --yes to change it)"
+            );
+            return;
+        }
     }
     match run_cmd("chsh", &["-s", &zsh_path]) {
         Ok(()) => eprintln!("OK (set to zsh)"),

@@ -643,7 +643,7 @@ targets:
 
 ### `diegops auth`
 
-Stores a GitHub token in `~/.diegops/tokens/gh.json` (mode 0600). The stored file wins over `$GITHUB_TOKEN`. `auth status` also shows the ktool kenv status.
+Stores a GitHub token in `~/.diegops/tokens/gh.json` (mode 0600). Resolution (since v1.8, ADR 0001): `$GITHUB_TOKEN` > `$GH_TOKEN` > stored token > `gh auth token`. `auth status` also shows the ktool kenv status.
 
 ### `diegops sync`
 
