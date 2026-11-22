@@ -64,3 +64,29 @@ fn secret_file_permissions() {
     assert_eq!(secret_file_check(&dir.join("nope")).status, Status::Fail);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[cfg(unix)]
+#[test]
+fn private_file_check_names_the_credential() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = std::env::temp_dir().join(format!("diegops-doctor-pf-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let f = dir.join("gh.json");
+    std::fs::write(&f, "{}").unwrap();
+    std::fs::set_permissions(&f, std::fs::Permissions::from_mode(0o644)).unwrap();
+    let c = private_file_check("github token file", &f);
+    assert_eq!(c.name, "github token file");
+    assert_eq!(c.status, Status::Warn);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn gh_token_source_labels() {
+    use super::super::auth::GhTokenSource;
+    assert_eq!(GhTokenSource::Env("GH_TOKEN").label(), "$GH_TOKEN");
+    assert_eq!(
+        GhTokenSource::Stored.label(),
+        "stored (~/.diegops/tokens/gh.json)"
+    );
+    assert_eq!(GhTokenSource::GhCli.label(), "gh auth token");
+}

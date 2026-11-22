@@ -198,6 +198,7 @@ fn backend_checks(offline: bool) -> Vec<Check> {
     if let Some(f) = &cfg.infisical.client_secret_file {
         out.push(secret_file_check(&config::expand(f, &home)));
     }
+    let source = config::credential_source(&cfg, kind, &env, &home);
     match secrets_backend::open_kind(&cfg, kind) {
         Err(e) => {
             let first = e.to_string().lines().next().unwrap_or_default().to_string();
@@ -216,11 +217,15 @@ fn backend_checks(offline: bool) -> Vec<Check> {
                 Check::new(
                     "backend",
                     Status::Ok,
-                    format!("{name}: credentials found (not contacted: --offline)"),
+                    format!("{name}: credentials found via {source} (not contacted: --offline)"),
                 )
             } else {
                 match backend.ping() {
-                    Ok(()) => Check::new("backend", Status::Ok, format!("{name}: credentials accepted")),
+                    Ok(()) => Check::new(
+                        "backend",
+                        Status::Ok,
+                        format!("{name}: credentials accepted ({source})"),
+                    ),
                     Err(e) => Check::new("backend", Status::Fail, format!("{name}: {e}"))
                         .hint("check the credentials and that the server is reachable; 'diegops explain backend'"),
                 }
@@ -233,7 +238,11 @@ fn backend_checks(offline: bool) -> Vec<Check> {
 
 /// Client secret files must be private (0600).
 pub fn secret_file_check(path: &Path) -> Check {
-    let name = "client secret";
+    private_file_check("client secret", path)
+}
+
+/// A credential file must be private (0600): ADR 0001 D6 file store.
+pub fn private_file_check(name: &'static str, path: &Path) -> Check {
     let meta = match std::fs::metadata(path) {
         Ok(m) => m,
         Err(_) => return Check::new(name, Status::Fail, format!("{} not found", path.display()))
@@ -259,7 +268,7 @@ pub fn secret_file_check(path: &Path) -> Check {
 }
 
 fn github_checks(offline: bool, api: &str) -> Vec<Check> {
-    let token = match super::auth::load_gh_token() {
+    let (token, source) = match super::auth::load_gh_token_with_source() {
         Ok(Some(t)) => t,
         Ok(None) => {
             return vec![Check::new(
@@ -271,14 +280,30 @@ fn github_checks(offline: bool, api: &str) -> Vec<Check> {
         }
         Err(e) => return vec![Check::new("github token", Status::Fail, e.to_string())],
     };
+    let mut out = Vec::new();
+    if source == super::auth::GhTokenSource::Stored {
+        if let Ok(dir) = super::auth::tokens_dir() {
+            out.push(private_file_check(
+                "github token file",
+                &dir.join("gh.json"),
+            ));
+        }
+    }
     if offline {
-        return vec![Check::new(
+        out.push(Check::new(
             "github token",
             Status::Ok,
-            "stored (not validated: --offline)",
-        )];
+            format!("{} (not validated: --offline)", source.label()),
+        ));
+        return out;
     }
-    github_token_check(api, &token)
+    out.extend(github_token_check(api, &token).into_iter().map(|mut c| {
+        if c.name == "github token" && c.status == Status::Ok {
+            c.detail = format!("{} ({})", c.detail, source.label());
+        }
+        c
+    }));
+    out
 }
 
 /// Validates the token and looks for the sync repo.
