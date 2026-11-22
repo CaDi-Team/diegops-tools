@@ -55,8 +55,8 @@ pub const GLOSSARY: &[Term] = &[
         body: "HashiCorp Vault and its open-source fork OpenBao are secrets servers you\n\
                run yourself. diegops supports them as an alternative to Infisical.\n\
                You need an address (VAULT_ADDR) and a token (bao login / VAULT_TOKEN).\n\
-               Note: the 'diegops vault' command writes .env files and works with any\n\
-               backend; it is not specific to Vault.",
+               Not to be confused with 'diegops env' (formerly 'diegops vault'), which\n\
+               writes .env files with any backend.",
         link: BACKENDS_DOC,
     },
     Term {
@@ -97,7 +97,7 @@ pub const GLOSSARY: &[Term] = &[
         summary: "a project .env file that diegops writes from the backend",
         body: "Many apps read settings from a .env file in the project folder.\n\
                ~/.diegops/repo-vault.yaml says which secret path goes to which\n\
-               folder; 'diegops vault apply' writes the files (overwriting them).\n\
+               folder; 'diegops env apply' writes the files (overwriting them).\n\
                .env files must never be committed to git.",
         link: README,
     },
@@ -106,9 +106,9 @@ pub const GLOSSARY: &[Term] = &[
         aliases: &["secrets", "files"],
         summary: "local files like ~/.ssh and ~/.kube backed up to the backend",
         body: "Some secrets are whole files (SSH keys, kubeconfigs).\n\
-               ~/.diegops/secrets.yaml lists the folders; 'diegops secrets push'\n\
-               uploads them and 'diegops secrets pull' restores them on another\n\
-               machine. 'diegops secrets status' compares both sides.",
+               ~/.diegops/secrets.yaml lists the folders; 'diegops files push'\n\
+               uploads them and 'diegops files pull' restores them on another\n\
+               machine. 'diegops files status' compares both sides.",
         link: README,
     },
     Term {

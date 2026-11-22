@@ -79,8 +79,8 @@ pub fn resolve_config_path(
 pub fn init_command_for(path: &Path) -> Option<&'static str> {
     match path.file_name()?.to_str()? {
         "repos.yaml" => Some("diegops repo init"),
-        "secrets.yaml" => Some("diegops secrets init"),
-        "repo-vault.yaml" => Some("diegops vault init"),
+        "secrets.yaml" => Some("diegops files init"),
+        "repo-vault.yaml" => Some("diegops env init"),
         "agents.yaml" => Some("diegops agents init"),
         "gpg-config.yaml" => Some("diegops devtools gpg init"),
         _ => None,
@@ -177,8 +177,8 @@ mod tests {
     fn missing_config_hint_names_the_init_command() {
         let cases = [
             ("repos.yaml", "diegops repo init"),
-            ("secrets.yaml", "diegops secrets init"),
-            ("repo-vault.yaml", "diegops vault init"),
+            ("secrets.yaml", "diegops files init"),
+            ("repo-vault.yaml", "diegops env init"),
             ("agents.yaml", "diegops agents init"),
             ("gpg-config.yaml", "diegops devtools gpg init"),
         ];

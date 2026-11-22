@@ -53,8 +53,8 @@ git, and nothing secret is ever written to git or printed on screen.
 
 | What | Stored in | Back up | Restore |
 |---|---|---|---|
-| SSH keys, kubeconfigs, any file you list | Secrets backend | `diegops secrets push` | `diegops secrets pull` |
-| Project `.env` files | Secrets backend | (you edit them in the backend) | `diegops vault apply` |
+| SSH keys, kubeconfigs, any file you list | Secrets backend | `diegops files push` | `diegops files pull` |
+| Project `.env` files | Secrets backend | (you edit them in the backend) | `diegops env apply` |
 | Git repositories | GitHub (they are already there) | — | `diegops repo apply` |
 | The lists above (`~/.diegops/*.yaml`) | Private GitHub repo | `diegops sync push` | `diegops sync pull` |
 | AI agent profiles (Hermes) | Agent backup repo + `.env` in the secrets backend | `diegops agents hermes backup` | `diegops agents hermes restore` |
@@ -167,6 +167,8 @@ To update later, run `diegops update`. It prints "Already up to date" when there
 
 ---
 
+> **Renamed in v1.8:** `diegops vault` is now `diegops env` (project `.env` files) and `diegops secrets` is now `diegops files` (secret files such as `~/.ssh`). The old names still work and print a warning; they will be removed no earlier than two minor releases later ([ADR 0001](architecture/adr/0001-onboarding-ux.md)).
+
 ## Quick start: secrets in 5 minutes with Infisical Cloud
 
 ### Why Infisical?
@@ -193,7 +195,7 @@ flowchart TD
     E --> F[Store client secret locally<br/>file 0600 or OS keyring]
     F --> G[Write ~/.config/diegops/config.toml]
     G --> H{diegops kv backend<br/>says infisical?}
-    H -- yes --> I[diegops secrets init, edit, push]
+    H -- yes --> I[diegops files init, edit, push]
     H -- no --> G
 ```
 
@@ -290,11 +292,11 @@ In the Infisical UI you will now see the folder `/demo/hello` with the secret `G
 Now back up real files:
 
 ```console
-$ diegops secrets init
+$ diegops files init
 Created: /home/you/.diegops/secrets.yaml
-Edit the file to add your secrets folders, then run `diegops secrets push`.
+Edit the file to add your secrets folders, then run `diegops files push`.
 
-$ diegops secrets push
+$ diegops files push
 $HOME/.ssh
   PUSH  id_ed25519
   PUSH  id_ed25519.pub
@@ -370,7 +372,7 @@ folders:
 - File contents are base64-encoded before upload, so binary files such as keystores and GPG keys are fine.
 - `push` only uploads files that changed, and it merges with what is already stored, so other keys are kept.
 - `pull` writes a `.bak` copy before overwriting a file that differs.
-- `diegops secrets update` adds `CLAUDE.md` and `AGENTS.md` files found in your `repos.yaml` targets.
+- `diegops files update` adds `CLAUDE.md` and `AGENTS.md` files found in your `repos.yaml` targets.
 
 ## Daily workflows
 
@@ -383,7 +385,7 @@ sequenceDiagram
     participant C as config.toml + secret file
     participant I as Infisical
     participant FS as Local disk
-    You->>D: diegops secrets pull
+    You->>D: diegops files pull
     D->>C: read project, client ID, client secret
     D->>I: Universal Auth login
     I-->>D: short-lived access token
@@ -399,7 +401,7 @@ sequenceDiagram
 # 1. Install diegops (above), then recreate config.toml and the client secret (Steps 3 and 4)
 diegops auth gh login         # GitHub token (hidden prompt), for sync and repo
 diegops sync pull             # brings back ~/.diegops/secrets.yaml and the other configs
-diegops secrets pull          # restores the files
+diegops files pull          # restores the files
 # or all at once:
 diegops bootstrap             # same as: diegops all pull
 ```
@@ -409,14 +411,14 @@ diegops bootstrap             # same as: diegops all pull
 Add it to `secrets.yaml` (a new `- name:` entry or a new folder), then run:
 
 ```sh
-diegops secrets push --path ~/.ssh   # only folders under this path
+diegops files push --path ~/.ssh   # only folders under this path
 diegops sync push                    # back up the edited secrets.yaml itself
 ```
 
 ### Check status
 
 ```console
-$ diegops secrets status
+$ diegops files status
 $HOME/.ssh
   SYNCED      id_ed25519
   DIFFERS     config
@@ -589,8 +591,8 @@ Errors go to stderr as `error: <what failed>`, with optional `  hint: <what to d
 | `diegops kv get <path> [--key K]` | Key names, or one raw value |
 | `diegops kv put <path> K=@file` or `K=-` | Upsert keys (inline values are refused) |
 | `diegops kv migrate <prefix>... [--from vault] [--to infisical] [--dry-run]` | Copy, then verify by SHA-256 |
-| `diegops secrets init/push/pull/status/update` | Back up or restore the files in `secrets.yaml` (`--path`, `--config`) |
-| `diegops vault init/apply/list/list-diff` | Write project `.env` files from the backend |
+| `diegops files init/push/pull/status/update` | Back up or restore the files in `secrets.yaml` (`--path`, `--config`) |
+| `diegops env init/apply/list/list-diff` | Write project `.env` files from the backend |
 | `diegops repo init/apply/list/list-diff` | Clone the repos in `repos.yaml` |
 | `diegops agents hermes backup/restore/status` | Back up or restore Hermes profiles (`--profile`, `--to`, `--force`, `--no-secrets`) |
 | `diegops agents hermes memory review/push` | Review, then push agent memories |
@@ -623,7 +625,7 @@ targets:
 
 `diegops repo init` creates a sample file, `repo apply` clones whatever is missing (safe to re-run), and `repo list-diff` shows what is missing.
 
-### `diegops vault`: `.env` files
+### `diegops env`: `.env` files
 
 Despite its name, this command works with **whichever backend is selected**. Configure it in `~/.diegops/repo-vault.yaml`:
 
@@ -637,7 +639,7 @@ targets:
         keys: "*"
 ```
 
-`diegops vault apply` writes `.env` (`KEY="value"`), backs up the old file to `.env.bak`, and adds both to `.gitignore`.
+`diegops env apply` writes `.env` (`KEY="value"`), backs up the old file to `.env.bak`, and adds both to `.gitignore`.
 
 ### `diegops auth`
 

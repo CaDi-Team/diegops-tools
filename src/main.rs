@@ -133,16 +133,23 @@ enum Commands {
         #[command(subcommand)]
         cmd: ShellCommand,
     },
-    /// Manage Vault secrets — pull secrets and write .env files
+    /// Project .env files: pull values from the secrets backend and write them
     #[command(
-        long_about = "Manage Vault secrets — pull secrets and write .env files.\n\n\
+        long_about = "Project .env files — pull values from the secrets backend and write them.\n\
+        (Formerly 'diegops vault'; the old name still works.)\n\n\
         Config: ~/.diegops/repo-vault.yaml (override with --config or $DIEGOPS_VAULT_CONFIG)\n\
         Requires: a configured secrets backend (Infisical default, or Vault/OpenBao)\n\
         in ~/.config/diegops/config.toml — see https://github.com/CaDi-Team/diegops-tools/blob/develop/docs/secrets-backends.md.\n\n\
         Quick start:\n  \
-        diegops vault init    # create sample config\n  \
-        diegops vault apply   # pull secrets and write .env files"
+        diegops env init      # create sample config\n  \
+        diegops env apply     # pull secrets and write .env files"
     )]
+    Env {
+        #[command(subcommand)]
+        cmd: VaultCommand,
+    },
+    /// Old name of `env`
+    #[command(hide = true)]
     Vault {
         #[command(subcommand)]
         cmd: VaultCommand,
@@ -169,15 +176,22 @@ enum Commands {
         #[command(subcommand)]
         cmd: commands::agents::AgentsCommand,
     },
-    /// Manage secret files — push, pull, and status
+    /// Secret files (~/.ssh, ~/.kube, …): push, pull and status
     #[command(
-        long_about = "Manage secret files — push, pull, and check sync status.\n\n\
+        long_about = "Secret files (~/.ssh, ~/.kube, …) — push, pull, and check sync status.\n\
+        (Formerly 'diegops secrets'; the old name still works.)\n\n\
         Config: ~/.diegops/secrets.yaml (override with --config or $DIEGOPS_SECRETS_CONFIG)\n\n\
         Quick start:\n  \
-        diegops secrets init    # create sample config\n  \
-        diegops secrets push    # push secret files to destinations\n  \
-        diegops secrets status  # show sync state"
+        diegops files init      # create sample config\n  \
+        diegops files push      # push secret files to destinations\n  \
+        diegops files status    # show sync state"
     )]
+    Files {
+        #[command(subcommand)]
+        cmd: SecretsCommand,
+    },
+    /// Old name of `files`
+    #[command(hide = true)]
     Secrets {
         #[command(subcommand)]
         cmd: SecretsCommand,
@@ -284,6 +298,71 @@ fn main() {
 
 /// Formats an error for humans: `error: <first line>` followed by any
 /// continuation lines (hints) exactly as written, never Debug-quoted.
+/// `diegops env …` (formerly `vault`): project .env files.
+fn run_env(cmd: VaultCommand) -> Result<(), Box<dyn std::error::Error>> {
+    let config_path_str;
+    match cmd {
+        VaultCommand::Apply { path, config } => {
+            config_path_str = config;
+            let cfg = config_path_str.as_deref().map(std::path::Path::new);
+            commands::vault::apply(cfg, path.as_deref())?;
+        }
+        VaultCommand::List { config } => {
+            config_path_str = config;
+            let cfg = config_path_str.as_deref().map(std::path::Path::new);
+            commands::vault::list(cfg)?;
+        }
+        VaultCommand::ListDiff { config } => {
+            config_path_str = config;
+            let cfg = config_path_str.as_deref().map(std::path::Path::new);
+            commands::vault::list_diff(cfg)?;
+        }
+        VaultCommand::Init => {
+            commands::vault::init(None)?;
+        }
+    }
+    Ok(())
+}
+
+/// `diegops files …` (formerly `secrets`): secret files like ~/.ssh.
+fn run_files(cmd: SecretsCommand) -> Result<(), Box<dyn std::error::Error>> {
+    let config_path_str;
+    match cmd {
+        SecretsCommand::Push { path, config } => {
+            config_path_str = config;
+            let cfg = config_path_str.as_deref().map(std::path::Path::new);
+            commands::secrets::push(cfg, path.as_deref())?;
+        }
+        SecretsCommand::Pull { path, config } => {
+            config_path_str = config;
+            let cfg = config_path_str.as_deref().map(std::path::Path::new);
+            commands::secrets::pull(cfg, path.as_deref())?;
+        }
+        SecretsCommand::Status { config } => {
+            config_path_str = config;
+            let cfg = config_path_str.as_deref().map(std::path::Path::new);
+            commands::secrets::status(cfg)?;
+        }
+        SecretsCommand::Init => {
+            commands::secrets::init(None)?;
+        }
+        SecretsCommand::Update {
+            repos_config,
+            config,
+        } => {
+            let repos_cfg = repos_config.as_deref().map(std::path::Path::new);
+            let secrets_cfg = config.as_deref().map(std::path::Path::new);
+            commands::secrets::update(secrets_cfg, repos_cfg)?;
+        }
+    }
+    Ok(())
+}
+
+/// Old command names kept as hidden aliases (ADR 0001 D1).
+fn warn_renamed(old: &str, new: &str) {
+    eprintln!("warning: 'diegops {old}' is now 'diegops {new}'; the old name will be removed in a future release");
+}
+
 fn render_error(msg: &str) -> String {
     format!("error: {}", msg.trim_end())
 }
@@ -381,65 +460,21 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
+        Some(Commands::Env { cmd }) => run_env(cmd)?,
         Some(Commands::Vault { cmd }) => {
-            let config_path_str;
-            match cmd {
-                VaultCommand::Apply { path, config } => {
-                    config_path_str = config;
-                    let cfg = config_path_str.as_deref().map(std::path::Path::new);
-                    commands::vault::apply(cfg, path.as_deref())?;
-                }
-                VaultCommand::List { config } => {
-                    config_path_str = config;
-                    let cfg = config_path_str.as_deref().map(std::path::Path::new);
-                    commands::vault::list(cfg)?;
-                }
-                VaultCommand::ListDiff { config } => {
-                    config_path_str = config;
-                    let cfg = config_path_str.as_deref().map(std::path::Path::new);
-                    commands::vault::list_diff(cfg)?;
-                }
-                VaultCommand::Init => {
-                    commands::vault::init(None)?;
-                }
-            }
+            warn_renamed("vault", "env");
+            run_env(cmd)?
+        }
+        Some(Commands::Files { cmd }) => run_files(cmd)?,
+        Some(Commands::Secrets { cmd }) => {
+            warn_renamed("secrets", "files");
+            run_files(cmd)?
         }
         Some(Commands::Agents { cmd }) => {
             commands::agents::run(cmd)?;
         }
         Some(Commands::Kv { cmd, backend }) => {
             commands::kv::run(cmd, backend.as_deref())?;
-        }
-        Some(Commands::Secrets { cmd }) => {
-            let config_path_str;
-            match cmd {
-                SecretsCommand::Push { path, config } => {
-                    config_path_str = config;
-                    let cfg = config_path_str.as_deref().map(std::path::Path::new);
-                    commands::secrets::push(cfg, path.as_deref())?;
-                }
-                SecretsCommand::Pull { path, config } => {
-                    config_path_str = config;
-                    let cfg = config_path_str.as_deref().map(std::path::Path::new);
-                    commands::secrets::pull(cfg, path.as_deref())?;
-                }
-                SecretsCommand::Status { config } => {
-                    config_path_str = config;
-                    let cfg = config_path_str.as_deref().map(std::path::Path::new);
-                    commands::secrets::status(cfg)?;
-                }
-                SecretsCommand::Init => {
-                    commands::secrets::init(None)?;
-                }
-                SecretsCommand::Update {
-                    repos_config,
-                    config,
-                } => {
-                    let repos_cfg = repos_config.as_deref().map(std::path::Path::new);
-                    let secrets_cfg = config.as_deref().map(std::path::Path::new);
-                    commands::secrets::update(secrets_cfg, repos_cfg)?;
-                }
-            }
         }
         Some(Commands::Auth { cmd }) => match cmd {
             AuthCommand::Gh { cmd: gh_cmd } => match gh_cmd {

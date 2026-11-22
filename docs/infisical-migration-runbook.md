@@ -85,9 +85,9 @@ HTTP 429, so a large run takes a few minutes. Re-running it is safe.
 ## 5. Switch the workstation over
 
 ```sh
-diegops secrets status        # now reads Infisical; expect everything "in sync"
-diegops secrets pull          # on a scratch machine or VM first
-diegops vault apply           # .env files from Infisical
+diegops files status        # now reads Infisical; expect everything "in sync"
+diegops files pull          # on a scratch machine or VM first
+diegops env apply           # .env files from Infisical
 gpg --list-secret-keys; ssh-add -l; sops -d <some file>   # smoke test the dpinto-work material
 ```
 

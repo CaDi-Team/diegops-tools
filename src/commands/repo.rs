@@ -297,7 +297,7 @@ targets:
 
 /// Returns all expanded target paths from the repos config.
 ///
-/// Used by `diegops secrets update` to discover project root directories
+/// Used by `diegops files update` to discover project root directories
 /// without exposing the internal config structures.
 pub fn target_paths(
     config_path: Option<&Path>,
