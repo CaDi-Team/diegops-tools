@@ -166,18 +166,61 @@ pub fn save_gh_token(token: &str) -> Result<(), Box<dyn std::error::Error>> {
     save_gh_token_to(&tokens_dir()?, token)
 }
 
-/// Loads the GitHub token. Resolution: file > $GITHUB_TOKEN > None.
-pub fn load_gh_token() -> Result<Option<String>, Box<dyn std::error::Error>> {
-    let from_file = load_gh_token_from(&tokens_dir()?)?;
-    if from_file.is_some() {
-        return Ok(from_file);
-    }
-    if let Ok(env_token) = std::env::var("GITHUB_TOKEN") {
-        if !env_token.is_empty() {
-            return Ok(Some(env_token));
+/// Where the GitHub token in use comes from.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum GhTokenSource {
+    Env(&'static str),
+    Stored,
+    GhCli,
+}
+
+/// ADR 0001 D2: `$GITHUB_TOKEN` > `$GH_TOKEN` > stored token > `gh auth token`.
+/// `gh` is only asked when nothing else is set (it is a subprocess).
+pub fn resolve_gh_token(
+    env: &dyn Fn(&str) -> Option<String>,
+    stored: Option<String>,
+    gh: &dyn Fn() -> Option<String>,
+) -> Option<(String, GhTokenSource)> {
+    for var in ["GITHUB_TOKEN", "GH_TOKEN"] {
+        if let Some(t) = env(var).filter(|t| !t.trim().is_empty()) {
+            return Some((t, GhTokenSource::Env(var)));
         }
     }
-    Ok(None)
+    if let Some(t) = stored {
+        return Some((t, GhTokenSource::Stored));
+    }
+    gh().filter(|t| !t.trim().is_empty())
+        .map(|t| (t, GhTokenSource::GhCli))
+}
+
+fn gh_cli_token() -> Option<String> {
+    if std::env::var("DIEGOPS_NO_GH_CLI").is_ok_and(|v| !v.is_empty() && v != "0") {
+        return None;
+    }
+    let out = std::process::Command::new("gh")
+        .args(["auth", "token"])
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok()?;
+    out.status
+        .success()
+        .then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+/// The GitHub token in use and its source.
+pub fn load_gh_token_with_source(
+) -> Result<Option<(String, GhTokenSource)>, Box<dyn std::error::Error>> {
+    let stored = load_gh_token_from(&tokens_dir()?)?;
+    Ok(resolve_gh_token(
+        &|k| std::env::var(k).ok(),
+        stored,
+        &gh_cli_token,
+    ))
+}
+
+/// Loads the GitHub token (see [`resolve_gh_token`] for the order).
+pub fn load_gh_token() -> Result<Option<String>, Box<dyn std::error::Error>> {
+    Ok(load_gh_token_with_source()?.map(|(t, _)| t))
 }
 
 /// Loads GitHub token metadata for status display.
@@ -373,14 +416,26 @@ fn load_ktool_kenv_token_data() -> Result<Option<TokenData>, Box<dyn std::error:
 
 /// Shows auth status for all providers.
 pub fn status() -> Result<(), Box<dyn std::error::Error>> {
-    match load_gh_token_data()? {
-        Some(data) => {
+    let stored = load_gh_token_data()?;
+    let from_env = ["GITHUB_TOKEN", "GH_TOKEN"]
+        .into_iter()
+        .find(|v| std::env::var(v).is_ok_and(|t| !t.trim().is_empty()));
+    match (from_env, stored) {
+        (Some(var), stored) => {
+            let note = if stored.is_some() {
+                " (overrides the stored token)"
+            } else {
+                ""
+            };
+            println!("GitHub (gh)    [ok] from ${var}{note}");
+        }
+        (None, Some(data)) => {
             println!(
                 "GitHub (gh)    [ok] configured    stored {}",
                 data.stored_at
             );
         }
-        None => {
+        (None, None) => {
             println!("GitHub (gh)    [--] not configured");
         }
     }
@@ -419,6 +474,32 @@ pub fn logout_all() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn env_token_beats_stored_and_gh_is_last() {
+        let env = |k: &str| (k == "GH_TOKEN").then(|| "gh-env".to_string());
+        let none = |_: &str| None;
+        let gh = || Some("from-gh".to_string());
+        let no_gh = || None;
+        assert_eq!(
+            resolve_gh_token(&env, Some("stored".into()), &gh),
+            Some(("gh-env".into(), GhTokenSource::Env("GH_TOKEN")))
+        );
+        let both = |k: &str| Some(format!("{k}-v"));
+        assert_eq!(
+            resolve_gh_token(&both, None, &gh).unwrap().1,
+            GhTokenSource::Env("GITHUB_TOKEN")
+        );
+        assert_eq!(
+            resolve_gh_token(&none, Some("stored".into()), &gh),
+            Some(("stored".into(), GhTokenSource::Stored))
+        );
+        assert_eq!(
+            resolve_gh_token(&none, None, &gh),
+            Some(("from-gh".into(), GhTokenSource::GhCli))
+        );
+        assert_eq!(resolve_gh_token(&none, None, &no_gh), None);
+    }
 
     #[test]
     fn save_and_load_gh_token() {

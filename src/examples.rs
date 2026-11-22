@@ -91,7 +91,9 @@ pub const ENVIRONMENT: &str = "ENVIRONMENT:
   DIEGOPS_VAULT_CONFIG                    repo-vault.yaml path (default ~/.diegops/repo-vault.yaml)
   DIEGOPS_AGENTS_CONFIG                   agents.yaml path (default ~/.diegops/agents.yaml)
   DIEGOPS_PROFILE                         sync profile name (separate sync repo per profile)
-  GITHUB_TOKEN                            GitHub token, used when none is stored by 'auth gh login'
+  GITHUB_TOKEN, GH_TOKEN                  GitHub token; overrides the one stored by 'auth gh login'
+  DIEGOPS_NO_GH_CLI                       do not fall back to 'gh auth token'
+  CI, DIEGOPS_NO_INPUT                    never prompt (same as --no-input)
   INFISICAL_TOKEN                         Infisical access token (skips machine identity login)
   INFISICAL_UNIVERSAL_AUTH_CLIENT_ID      Infisical machine identity client id
   INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET  Infisical machine identity client secret
@@ -204,6 +206,9 @@ mod tests {
             "DIEGOPS_AGENTS_CONFIG",
             "DIEGOPS_PROFILE",
             "GITHUB_TOKEN",
+            "GH_TOKEN",
+            "DIEGOPS_NO_INPUT",
+            "DIEGOPS_NO_GH_CLI",
             "INFISICAL_TOKEN",
             "INFISICAL_UNIVERSAL_AUTH_CLIENT_ID",
             "INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET",

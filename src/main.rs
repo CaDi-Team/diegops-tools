@@ -2,6 +2,7 @@ mod commands;
 mod examples;
 mod help;
 mod secrets_backend;
+mod ui;
 
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use commands::all::AllCommand;
@@ -37,6 +38,18 @@ use commands::vault::VaultCommand;
 pub(crate) struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
+    /// Accept defaults and confirmations without asking
+    #[arg(short = 'y', long, global = true)]
+    yes: bool,
+    /// Never prompt; fail (exit 2) if input is needed. Also: $CI, $DIEGOPS_NO_INPUT
+    #[arg(long, global = true, alias = "non-interactive")]
+    no_input: bool,
+    /// Show what would change and change nothing (commands that write)
+    #[arg(short = 'n', long, global = true)]
+    dry_run: bool,
+    /// Secrets backend: infisical | vault (alias openbao). Overrides $DIEGOPS_SECRETS_BACKEND
+    #[arg(long, global = true, value_name = "NAME")]
+    backend: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -160,9 +173,6 @@ enum Commands {
         ~/.config/diegops/config.toml > infisical (Infisical Cloud).\n\
         Paths are <mount>/<path> as in Vault KV v2. See https://github.com/CaDi-Team/diegops-tools/blob/develop/docs/secrets-backends.md.")]
     Kv {
-        /// Backend: infisical | vault (alias openbao)
-        #[arg(long, global = true)]
-        backend: Option<String>,
         #[command(subcommand)]
         cmd: commands::kv::KvCommand,
     },
@@ -199,7 +209,7 @@ enum Commands {
     /// Manage authentication tokens (GitHub, kenv)
     #[command(long_about = "Manage authentication tokens for external services.\n\n\
         Storage: ~/.diegops/tokens/ (0600 permissions on Unix)\n\
-        Resolution: stored file > $GITHUB_TOKEN env var > unauthenticated\n\n\
+        Resolution: $GITHUB_TOKEN > $GH_TOKEN > stored token > `gh auth token`\n\n\
         Quick start:\n  \
         diegops auth gh login         # store GitHub token\n  \
         diegops auth status           # check all providers")]
@@ -296,8 +306,6 @@ fn main() {
     }
 }
 
-/// Formats an error for humans: `error: <first line>` followed by any
-/// continuation lines (hints) exactly as written, never Debug-quoted.
 /// `diegops env …` (formerly `vault`): project .env files.
 fn run_env(cmd: VaultCommand) -> Result<(), Box<dyn std::error::Error>> {
     let config_path_str;
@@ -363,6 +371,19 @@ fn warn_renamed(old: &str, new: &str) {
     eprintln!("warning: 'diegops {old}' is now 'diegops {new}'; the old name will be removed in a future release");
 }
 
+/// Space-joined subcommand path, e.g. "env apply".
+fn command_path(m: &clap::ArgMatches) -> String {
+    let mut parts = Vec::new();
+    let mut cur = m;
+    while let Some((name, sub)) = cur.subcommand() {
+        parts.push(name.to_string());
+        cur = sub;
+    }
+    parts.join(" ")
+}
+
+/// Formats an error for humans: `error: <first line>` followed by any
+/// continuation lines (hints) exactly as written, never Debug-quoted.
 fn render_error(msg: &str) -> String {
     format!("error: {}", msg.trim_end())
 }
@@ -375,7 +396,27 @@ fn cli_command() -> clap::Command {
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let cmd = cli_command();
     let cmd = cmd.clone().help_template(help::template(&cmd));
-    let cli = Cli::from_arg_matches(&cmd.get_matches()).unwrap_or_else(|e| e.exit());
+    let matches = cmd.get_matches();
+    let cli = Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit());
+    let (yes, dry_run, backend) = (cli.yes, cli.dry_run, cli.backend.clone());
+    ui::set(ui::Flags {
+        yes,
+        no_input: cli.no_input,
+        dry_run,
+    });
+    if let Err(msg) = ui::check_dry_run(dry_run, &command_path(&matches)) {
+        eprintln!("{msg}");
+        std::process::exit(2);
+    }
+    if let Some(b) = backend.as_deref() {
+        // One place decides the backend for every command (ADR 0001 D4).
+        let cfg = secrets_backend::config::Config::default();
+        if let Err(e) = secrets_backend::config::select_kind(&cfg, Some(b), &|_| None) {
+            eprintln!("error: {e}\n  hint: use --backend infisical or --backend vault");
+            std::process::exit(2);
+        }
+        std::env::set_var("DIEGOPS_SECRETS_BACKEND", b);
+    }
     match cli.command {
         Some(Commands::Doctor { json, offline }) => {
             commands::doctor::run(json, offline)?;
@@ -433,7 +474,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
         },
         Some(Commands::Shell { cmd }) => match cmd {
-            ShellCommand::Init { dry_run, yes } => {
+            ShellCommand::Init => {
                 commands::shell::init(dry_run, yes)?;
             }
         },
@@ -473,7 +514,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         Some(Commands::Agents { cmd }) => {
             commands::agents::run(cmd)?;
         }
-        Some(Commands::Kv { cmd, backend }) => {
+        Some(Commands::Kv { cmd }) => {
             commands::kv::run(cmd, backend.as_deref())?;
         }
         Some(Commands::Auth { cmd }) => match cmd {

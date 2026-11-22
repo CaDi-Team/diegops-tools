@@ -47,9 +47,6 @@ pub enum KvCommand {
         /// Target backend
         #[arg(long, default_value = "infisical")]
         to: String,
-        /// Show the plan without writing
-        #[arg(long)]
-        dry_run: bool,
     },
 }
 
@@ -111,12 +108,8 @@ pub fn run(cmd: KvCommand, backend: Option<&str>) -> Result<(), BoxError> {
             b.put(&path, &data)?;
             println!("wrote {} key(s) to '{path}' ({})", data.len(), b.name());
         }
-        KvCommand::Migrate {
-            prefixes,
-            from,
-            to,
-            dry_run,
-        } => {
+        KvCommand::Migrate { prefixes, from, to } => {
+            let dry_run = crate::ui::flags().dry_run;
             let (cfg_path, cfg) = secrets_backend::load_config()?;
             let src_kind = config::select_kind(&cfg, Some(&from), &secrets_backend::real_env)?;
             let dst_kind = config::select_kind(&cfg, Some(&to), &secrets_backend::real_env)?;
