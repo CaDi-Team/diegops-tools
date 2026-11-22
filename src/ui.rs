@@ -12,6 +12,7 @@ pub struct Flags {
     pub dry_run: bool,
     pub quiet: bool,
     pub verbose: bool,
+    pub json: bool,
 }
 
 static FLAGS: OnceLock<Flags> = OnceLock::new();
@@ -119,6 +120,42 @@ pub fn check_dry_run(dry_run: bool, path: &str) -> Result<(), String> {
     ))
 }
 
+/// Read commands with a documented `--json` schema (ADR 0001 D4; README
+/// "JSON output"). Names only, never secret values.
+pub const JSON_COMMANDS: &[&str] = &[
+    "doctor",
+    "files status",
+    "kv list",
+    "kv get",
+    "repo list",
+    "repo list-diff",
+    "tool list",
+    "agents status",
+    "agents hermes status",
+];
+
+/// `Err` (usage) if `--json` was given to a command without a JSON schema.
+pub fn check_json(json: bool, path: &str) -> Result<(), String> {
+    if !json || JSON_COMMANDS.contains(&path) {
+        return Ok(());
+    }
+    Err(format!(
+        "error: --json is not supported by 'diegops {path}'\n  \
+         hint: supported: {}",
+        JSON_COMMANDS
+            .iter()
+            .map(|c| format!("'diegops {c}'"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    ))
+}
+
+/// Prints `v` as pretty JSON on stdout.
+pub fn print_json(v: &impl serde::Serialize) -> Result<(), Box<dyn std::error::Error>> {
+    println!("{}", serde_json::to_string_pretty(v)?);
+    Ok(())
+}
+
 /// Asks `question` (default yes) or applies the rule; `Err` when refused.
 pub fn confirm(question: &str) -> Result<bool, Box<dyn std::error::Error>> {
     use std::io::{BufRead, IsTerminal, Write};
@@ -150,6 +187,17 @@ pub fn confirm(question: &str) -> Result<bool, Box<dyn std::error::Error>> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn json_only_on_read_commands() {
+        assert!(check_json(true, "repo list").is_ok());
+        assert!(check_json(false, "env apply").is_ok());
+        let e = check_json(true, "env apply").unwrap_err();
+        assert!(
+            e.contains("--json is not supported by 'diegops env apply'"),
+            "{e}"
+        );
+    }
+
     #[test]
     fn quiet_hides_progress_verbose_shows_debug() {
         let f = |quiet, verbose| Flags {

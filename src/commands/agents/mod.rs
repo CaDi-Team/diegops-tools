@@ -121,6 +121,17 @@ pub fn run(cmd: AgentsCommand) -> Result<(), BoxError> {
         AgentsCommand::Status => {
             let (_, reg) = Registry::load(None)?;
             let state = support::RunState::load()?;
+            if crate::ui::flags().json {
+                let agents: Vec<_> = reg
+                    .agents
+                    .iter()
+                    .map(|a| {
+                        let k = a.kind.as_str();
+                        serde_json::json!({ "agent": k, "last_run": state.agents.get(k) })
+                    })
+                    .collect();
+                return crate::ui::print_json(&serde_json::json!({ "agents": agents }));
+            }
             for a in &reg.agents {
                 hermes::print_run(&state, a.kind.as_str());
             }

@@ -649,6 +649,19 @@ Stores a GitHub token in `~/.diegops/tokens/gh.json` (mode 0600). Resolution (si
 
 **Output (since v1.8):** `-q/--quiet` hides progress lines (errors, warnings, hints and results still print); `-v/--verbose` prints `diegops: ...` lines saying which config file, secrets backend and GitHub token source are in use (never values). They are mutually exclusive. Data goes to stdout, messages to stderr; diegops only colors clap's help/errors, which honor `NO_COLOR` and `TERM=dumb`.
 
+### JSON output (since v1.8)
+
+`--json` (global) is accepted only by read commands; any other command exits 2. Output is one pretty-printed JSON object on stdout; messages stay on stderr. **Never contains secret values**, only names. Fields are only ever added within v1.x.
+
+- `doctor` → `{ok, checks: [{name, status: "ok"|"warn"|"fail"|"skip", detail, hint?}]}` (exit 1 if any fail)
+- `files status` → `{folders: [{dest, vault_path, exists, error, files: [{name, state: "synced"|"differs"|"local_only"|"vault_only"|"unreadable"|"unknown"}]}]}`
+- `kv list <path>` → `{backend, path, entries: [names; "x/" = folder]}`
+- `kv get <path>` → `{backend, path, keys: [names]}` (`--key` with `--json` exits 2)
+- `repo list` / `repo list-diff` → `{targets: [{path, repos: [{name, url}]}], total}` (cloned / not yet cloned)
+- `tool list` → `{tools: [{name, description, installed, version|null}]}`
+- `agents status` → `{agents: [{agent, last_run: {last_ok, last_attempt, last_error, files, bytes, commit}|null}]}` (unix times)
+- `agents hermes status` → `{root, repo, last_run, profiles: [{name, backed_up, definition_changes, memories_to_review}]}`
+
 ### `diegops sync`
 
 The first `push` creates a private repo named `diegops-<github-user>-memory`. With `DIEGOPS_PROFILE=work` it uses `diegops-<github-user>-work-memory` instead. It syncs `~/.diegops/` except `tokens/` and `bin/`. `push` overwrites the cloud copy and `pull` overwrites the local one.

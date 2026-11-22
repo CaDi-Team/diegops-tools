@@ -1335,3 +1335,90 @@ fn verbose_says_where_the_config_comes_from() {
         .unwrap();
     assert!(!String::from_utf8_lossy(&out.stderr).contains("config: "));
 }
+
+fn json_of(out: &std::process::Output) -> serde_json::Value {
+    serde_json::from_slice(&out.stdout).unwrap_or_else(|e| {
+        panic!(
+            "not JSON ({e}): {}\nstderr: {}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        )
+    })
+}
+
+#[test]
+fn json_on_a_command_without_it_is_a_usage_error() {
+    let home = TmpHome::new();
+    for args in [
+        vec!["env", "list", "--json"],
+        vec!["kv", "get", "a/b", "--key", "KEY", "--json"],
+    ] {
+        let out = diegops()
+            .env("HOME", home.path())
+            .args(&args)
+            .output()
+            .unwrap();
+        assert_eq!(out.status.code(), Some(2), "{args:?}");
+        assert!(String::from_utf8_lossy(&out.stderr).contains("--json"));
+    }
+}
+
+#[test]
+fn repo_list_and_list_diff_json() {
+    let home = TmpHome::new();
+    let work = home.path().join("work");
+    std::fs::create_dir_all(work.join("cloned/.git")).unwrap();
+    let cfg = home.path().join("repos.yaml");
+    std::fs::write(
+        &cfg,
+        format!(
+            "targets:\n  - path: {}\n    repos:\n      - https://github.com/o/cloned.git\n      - https://github.com/o/missing.git\n",
+            work.display()
+        ),
+    )
+    .unwrap();
+    let run = |sub: &str| {
+        diegops()
+            .env("HOME", home.path())
+            .args(["repo", sub, "--config", cfg.to_str().unwrap(), "--json"])
+            .output()
+            .unwrap()
+    };
+    let v = json_of(&run("list"));
+    assert_eq!(v["targets"][0]["repos"][0]["name"], "cloned");
+    assert_eq!(v["total"], 1);
+    let v = json_of(&run("list-diff"));
+    assert_eq!(v["targets"][0]["repos"][0]["name"], "missing");
+    assert_eq!(
+        v["targets"][0]["repos"][0]["url"],
+        "https://github.com/o/missing.git"
+    );
+    assert_eq!(v["total"], 1);
+}
+
+#[test]
+fn tool_list_json() {
+    let home = TmpHome::new();
+    let out = diegops()
+        .env("HOME", home.path())
+        .args(["tool", "list", "--json"])
+        .output()
+        .unwrap();
+    let v = json_of(&out);
+    let tools = v["tools"].as_array().expect("tools");
+    assert!(!tools.is_empty());
+    assert_eq!(tools[0]["installed"], false);
+    assert!(tools[0]["version"].is_null());
+}
+
+#[test]
+fn doctor_json_works_as_a_global_flag() {
+    let home = TmpHome::new();
+    let out = diegops()
+        .env("HOME", home.path())
+        .env("DIEGOPS_NO_GH_CLI", "1")
+        .args(["--json", "doctor", "--offline"])
+        .output()
+        .unwrap();
+    assert!(json_of(&out)["checks"].is_array());
+}
